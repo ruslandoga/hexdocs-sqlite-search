@@ -17,7 +17,8 @@ defmodule WatWeb.Router do
   scope "/", WatWeb do
     pipe_through :browser
 
-    get "/", PageController, :home
+    live "/", SearchLive, :index
+    get "/docs/:package", DocsController, :show
   end
 
   # Other scopes may use custom stacks.

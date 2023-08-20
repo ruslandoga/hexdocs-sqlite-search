@@ -1,1 +1,10 @@
-eh
+- [x] populate docs_fts
+- [x] UI for index exploration
+- [x] populate docs.embedding
+- [x] construct multi_search queries
+- [ ] UI for search
+- [ ] compare to current hexdocs/ex_doc search
+- [ ] prepare title index similar to ex_doc (Mix.Tasks.... -> mix phx.gen...., no subheadings in functions)
+- [ ] populate packages_graph, maybe come up with other ways to calculate package similarity
+- [ ] faiss
+- [ ] fly.io demo
