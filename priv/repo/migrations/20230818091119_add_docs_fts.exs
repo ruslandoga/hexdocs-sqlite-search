@@ -3,17 +3,17 @@ defmodule Wat.Repo.Migrations.AddDocsFts do
 
   def change do
     execute """
-            create virtual table docs_title_fts using fts5(title, tokenize='trigram', content='docs', content_rowid='id')
+            create virtual table autocomplete using fts5(title, tokenize='trigram', content='docs', content_rowid='id')
             """,
             """
-            drop table if exists docs_title_fts
+            drop table if exists autocomplete
             """
 
     execute """
-            create virtual table docs_doc_fts using fts5(doc, content='docs', content_rowid='id')
+            create virtual table fts using fts5(title, doc, tokenize='porter', content='docs', content_rowid='id')
             """,
             """
-            drop table if exists docs_doc_fts
+            drop table if exists fts
             """
   end
 end

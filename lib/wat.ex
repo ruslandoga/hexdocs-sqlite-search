@@ -17,9 +17,7 @@ defmodule Wat do
     def unquote(key)(), do: Application.fetch_env!(@app, unquote(key))
   end
 
-  @default_packages ["phoenix", "phoenix_live_view", "ecto", "ecto_sql"]
-
-  def list_similar_content(content, packages \\ @default_packages)
+  def list_similar_content(content, packages \\ [])
 
   def list_similar_content(content, packages) when is_binary(content) do
     content
@@ -30,38 +28,67 @@ defmodule Wat do
   def list_similar_content(embedding, packages) when is_list(embedding) do
     import Ecto.Query
 
-    top =
-      "docs"
-      |> where([d], d.package in ^packages)
-      |> where([d], not is_nil(d.embedding))
-      |> select([d], map(d, [:id, :embedding]))
-      |> Wat.Repo.all()
-      |> Enum.map(fn doc ->
-        similarity = cosine_similarity(decode_embedding(doc.embedding), embedding)
-        Map.put(doc, :similarity, similarity)
+    %HNSWLib.Index{} = index = :persistent_term.get(:hnsw)
+
+    with {:ok, labels, dists} <-
+           HNSWLib.Index.knn_query(index, Nx.tensor(embedding, type: :f32), k: 20) do
+      [ids] = Nx.to_list(labels)
+      [dists] = Nx.to_list(dists)
+
+      docs =
+        "docs"
+        |> where([d], d.id in ^ids)
+        |> maybe_limit_packages(packages)
+        |> select([d], map(d, [:id, :title, :ref, :package, :doc]))
+        |> Wat.Repo.all()
+        |> Map.new(fn %{id: id} = doc -> {id, doc} end)
+
+      ids
+      |> Enum.zip(dists)
+      |> Enum.map(fn {id, dist} ->
+        if doc = Map.get(docs, id) do
+          Map.put(doc, :similarity, 1 - dist)
+        end
       end)
-      |> Enum.sort_by(& &1.similarity, :desc)
-      |> Enum.take(10)
-
-    similarities = Map.new(top, fn doc -> {doc.id, doc.similarity} end)
-
-    "docs"
-    |> where([d], d.id in ^Map.keys(similarities))
-    |> select([d], map(d, [:id, :package, :title, :ref, :doc, :type]))
-    |> Wat.Repo.all()
-    |> Enum.map(fn doc -> Map.put(doc, :similarity, Map.fetch!(similarities, doc.id)) end)
-    |> Enum.sort_by(& &1.similarity, :desc)
+      |> Enum.reject(&is_nil/1)
+    end
   end
 
-  defp cosine_similarity(a, b), do: cosine_similarity(a, b, 0, 0, 0)
+  # def list_similar_content(embedding, packages) when is_list(embedding) do
+  #   import Ecto.Query
 
-  defp cosine_similarity([x1 | rest1], [x2 | rest2], s1, s2, s12) do
-    cosine_similarity(rest1, rest2, x1 * x1 + s1, x2 * x2 + s2, x1 * x2 + s12)
-  end
+  #   top =
+  #     "docs"
+  #     |> maybe_limit_packages(packages)
+  #     |> where([d], not is_nil(d.embedding))
+  #     |> select([d], map(d, [:id, :embedding]))
+  #     |> Wat.Repo.all()
+  #     |> Enum.map(fn doc ->
+  #       similarity = cosine_similarity(decode_embedding(doc.embedding), embedding)
+  #       Map.put(doc, :similarity, similarity)
+  #     end)
+  #     |> Enum.sort_by(& &1.similarity, :desc)
+  #     |> Enum.take(10)
 
-  defp cosine_similarity([], [], s1, s2, s12) do
-    s12 / (:math.sqrt(s1) * :math.sqrt(s2))
-  end
+  #   similarities = Map.new(top, fn doc -> {doc.id, doc.similarity} end)
+
+  #   "docs"
+  #   |> where([d], d.id in ^Map.keys(similarities))
+  #   |> select([d], map(d, [:id, :package, :title, :ref, :doc, :type]))
+  #   |> Wat.Repo.all()
+  #   |> Enum.map(fn doc -> Map.put(doc, :similarity, Map.fetch!(similarities, doc.id)) end)
+  #   |> Enum.sort_by(& &1.similarity, :desc)
+  # end
+
+  # defp cosine_similarity(a, b), do: cosine_similarity(a, b, 0, 0, 0)
+
+  # defp cosine_similarity([x1 | rest1], [x2 | rest2], s1, s2, s12) do
+  #   cosine_similarity(rest1, rest2, x1 * x1 + s1, x2 * x2 + s2, x1 * x2 + s12)
+  # end
+
+  # defp cosine_similarity([], [], s1, s2, s12) do
+  #   s12 / (:math.sqrt(s1) * :math.sqrt(s2))
+  # end
 
   def encode_embedding(embedding) when is_list(embedding) do
     embedding
@@ -94,46 +121,81 @@ defmodule Wat do
     |> Wat.Repo.update_all(set: [embedding: encode_embedding(embedding)])
   end
 
-  def search_title(query, packages \\ @default_packages) do
+  def search_title(query, packages) do
     import Ecto.Query
 
     "docs"
-    |> where([d], d.package in ^packages)
-    |> join(:inner, [d], t in "docs_title_fts", on: d.id == t.rowid)
+    |> maybe_limit_packages(packages)
+    |> join(:inner, [d], t in "autocomplete", on: d.id == t.rowid)
+    |> join(:inner, [d], p in "packages", on: d.package == p.name and p.recent_downloads > 100)
     |> where([d, t], fragment("? MATCH ?", t.title, ^clean_query(query)))
-    |> select([d, t], %{
+    |> select([d, t, p], %{
       id: d.id,
       package: d.package,
       ref: d.ref,
       title: d.title,
-      rank: fragment("rank")
+      rank: fragment("rank"),
+      recent_downloads: p.recent_downloads
     })
-    |> order_by([_], fragment("rank"))
-    |> limit(10)
+    |> order_by([_, _, p], [fragment("round(rank)"), desc: p.recent_downloads])
+    |> limit(25)
     |> Wat.Repo.all()
   end
 
-  def search_doc(query, packages \\ @default_packages) do
+  def search_doc(query, packages) do
     import Ecto.Query
 
     "docs"
-    |> where([d], d.package in ^packages)
+    |> maybe_limit_packages(packages)
     |> join(:inner, [d], f in "docs_doc_fts", on: d.id == f.rowid)
-    |> where([d, f], fragment("? MATCH ?", f.doc, ^clean_query(query)))
-    |> select([d, f], %{
+    |> join(:inner, [d], p in "packages", on: d.package == p.name)
+    |> where([d, f], fragment("docs_doc_fts MATCH ?", ^clean_query(query)))
+    |> select([d, f, p], %{
       id: d.id,
       package: d.package,
       ref: d.ref,
-      title: d.title,
-      doc: d.doc,
-      rank: fragment("rank")
+      title: fragment("snippet(docs_doc_fts, 0, '<b><i>', '</i></b>', '...', 64)"),
+      doc: fragment("snippet(docs_doc_fts, 1, '<b><i>', '</i></b>', '...', 100)"),
+      rank: fragment("round(rank)") - p.recent_downloads / 100_000,
+      recent_downloads: p.recent_downloads
     })
-    |> order_by([_], fragment("rank"))
-    |> limit(10)
+    |> order_by([_, _, p], fragment("round(rank)") - p.recent_downloads / 100_000)
+    |> limit(20)
     |> Wat.Repo.all()
+  end
+
+  defp maybe_limit_packages(query, []), do: query
+
+  defp maybe_limit_packages(query, packages) do
+    import Ecto.Query
+    where(query, [d], d.package in ^packages)
   end
 
   defp clean_query(query) do
-    String.replace(query, ["."], " ")
+    query
+    |> String.split(" ")
+    |> Enum.map(&maybe_escape_query/1)
+    |> Enum.join(" OR ")
   end
+
+  defp maybe_escape_query(query) do
+    escaped =
+      if String.contains?(query, "\"") do
+        escape_query(query)
+      else
+        query
+      end
+
+    "\"" <> escaped <> "\""
+  end
+
+  defp escape_query(<<?", rest::bytes>>) do
+    <<?", ?", escape_query(rest)::bytes>>
+  end
+
+  defp escape_query(<<c, rest::bytes>>) do
+    <<c, escape_query(rest)::bytes>>
+  end
+
+  defp escape_query(<<>> = done), do: done
 end

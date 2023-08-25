@@ -20,7 +20,20 @@ if System.get_env("PHX_SERVER") do
   config :wat, WatWeb.Endpoint, server: true
 end
 
-if config_env() == :prod do
+config :wat, Wat.Repo,
+  # busy_timeout: :timer.seconds(5),
+  cache_size: -2000
+
+# config :wat, Wat.Repo,
+#   after_connect: fn _conn ->
+#     [db_conn] = Process.get(:"$callers")
+#     {:no_state, %{state: %Exqlite.Connection{} = conn}} = :sys.get_state(db_conn)
+#     :ok = Exqlite.Basic.enable_load_extension(conn)
+#     Exqlite.Basic.load_extension(conn, SqliteVss.loadable_path_vector0())
+#     Exqlite.Basic.load_extension(conn, SqliteVss.loadable_path_vss0())
+#   end
+
+if(config_env() == :prod) do
   database_path =
     System.get_env("DATABASE_PATH") ||
       raise """

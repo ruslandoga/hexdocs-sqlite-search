@@ -4,63 +4,165 @@ defmodule WatWeb.SearchLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="h-screen max-w-2xl mx-auto">
-      <form id="ask-form" class="w-full" phx-submit="ask">
+    <div class="h-screen">
+      <form id="search-form" class="max-w-2xl mx-auto" phx-change="autocomplete" phx-submit="search">
         <input
           type="text"
-          name="question"
-          placeholder="Ask a question about Elixir ecosystem..."
+          name="query"
+          placeholder="Search..."
+          value={@query}
           class="mt-4 w-full dark:bg-zinc-500 dark:border-zinc-400"
+          phx-debounce="50"
         />
       </form>
 
-      <%= if @answer do %>
-        <div class="mt-4 prose prose-zinc dark:prose-invert"><%= raw(@answer) %></div>
-        <div class="mt-4 text-xs font-mono">It took <%= @duration %> ms to answer</div>
-      <% end %>
+      <div class="mt-2 flex w-full p-2 space-x-2">
+        <div class="w-1/3">
+          <h3 class="text-center text-xs font-semibold opacity-80 uppercase">Autocomplete</h3>
+
+          <ul class="mt-3 space-y-2">
+            <%= for item <- @trigram do %>
+              <li class="dark:bg-sky-700 rounded border dark:border-sky-500 overflow-y-auto hover:bg-sky-600 transition">
+                <a
+                  href={"https://hexdocs.pm/#{item.package}/#{item.ref}"}
+                  class="p-2 block w-full h-full"
+                >
+                  <div class="text-sm flex justify-between">
+                    <span class="rounded px-1.5 py-0.5 dark:bg-sky-800">
+                      <%= item.package %> (<%= item.recent_downloads %>)
+                    </span>
+                    <span class="font-mono">Rank = <%= Float.round(item.rank, 2) %></span>
+                  </div>
+
+                  <div class="mt-2">
+                    <span class="text-sm font-mono font-semibold"><%= item.title %></span>
+                  </div>
+                </a>
+              </li>
+            <% end %>
+          </ul>
+        </div>
+
+        <div class="w-1/3">
+          <h3 class="text-center text-xs font-semibold opacity-80 uppercase">
+            Full-text (press enter)
+          </h3>
+
+          <ul class="mt-3 space-y-2">
+            <%= for item <- @fts do %>
+              <li class="dark:bg-teal-700 rounded border dark:border-teal-500 overflow-y-auto hover:bg-teal-600 transition">
+                <a href={"https://hexdocs.pm/#{item.package}/#{item.ref}"} class="p-2 block">
+                  <div class="text-sm flex justify-between">
+                    <span class="rounded px-1.5 py-0.5 dark:bg-teal-800">
+                      <%= item.package %> (<%= item.recent_downloads %>)
+                    </span>
+                    <span class="font-mono">Rank = <%= Float.round(item.rank, 2) %></span>
+                  </div>
+
+                  <div class="mt-2">
+                    <span class="text-sm font-mono font-semibold"><%= raw(item.title) %></span>
+                    <p class="mt-1 text-xs"><%= raw(item.doc) %></p>
+                  </div>
+                </a>
+              </li>
+            <% end %>
+          </ul>
+        </div>
+
+        <div class="w-1/3">
+          <h3 class="text-center text-xs font-semibold opacity-80 uppercase">
+            Semantic (press enter)
+          </h3>
+
+          <ul class="mt-3 space-y-2">
+            <%= for item <- @semantic do %>
+              <li class="dark:bg-indigo-700 rounded border dark:border-indigo-500 overflow-y-auto hover:bg-indigo-600 transition">
+                <a href={"https://hexdocs.pm/#{item.package}/#{item.ref}"} class="p-2 block">
+                  <div class="text-sm flex justify-between">
+                    <span class="rounded px-1.5 py-0.5 dark:bg-indigo-800"><%= item.package %></span>
+                    <span class="font-mono">
+                      Cosine similarity = <%= Float.round(item.similarity, 2) %>
+                    </span>
+                  </div>
+
+                  <div class="mt-2">
+                    <span class="text-sm font-mono font-semibold"><%= item.title %></span>
+                    <p class="mt-1 text-xs"><%= item.doc %></p>
+                  </div>
+                </a>
+              </li>
+            <% end %>
+          </ul>
+        </div>
+      </div>
     </div>
     """
   end
 
+  # TODO
+  # package relations, ranking
+  # deploy demo
+  # read sqlite fts5 docs
+  # read lunr.js docs, and ex_doc usage
+  # improve autocomplete search (make it similar to ex_doc)
+  # improve full-text search (make it similar to ex_doc)
+  # faiss ivf vs hnswlib
+  # sqlite vs typesense
+
   @impl true
   def mount(_params, _session, socket) do
-    {:ok, assign(socket, answering: false), temporary_assigns: [answer: nil, duration: nil]}
-  end
-
-  # TODO debounce
-  @impl true
-  def handle_event("ask", %{"question" => question}, %{assigns: %{answering: false}} = socket) do
-    lv = self()
-
-    Task.start(fn ->
-      start_at = System.monotonic_time(:millisecond)
-      answer = answer(question)
-      end_at = System.monotonic_time(:millisecond)
-      send(lv, {:answer, answer, _duration = end_at - start_at})
-    end)
-
-    {:noreply, assign(socket, answering: true)}
+    {:ok, assign(socket, trigram: [], fts: [], semantic: [])}
   end
 
   @impl true
-  def handle_info({:answer, answer, duration}, socket) when is_binary(answer) do
-    socket =
-      case Earmark.as_html(answer) do
-        {:ok, html, _} -> assign(socket, answer: html, duration: duration)
-        _ -> assign(socket, answer: answer, duration: duration)
+  def handle_params(params, _uri, socket) do
+    query = params["query"]
+    full = !!params["full"]
+
+    packages =
+      cond do
+        packages = params["packages"] ->
+          if is_list(packages), do: packages, else: String.split(packages, ",")
+
+        package = params["package"] ->
+          [package]
+
+        true ->
+          []
       end
 
-    {:noreply, assign(socket, answering: false)}
+    socket = assign(socket, query: query, packages: packages)
+
+    socket =
+      cond do
+        query && String.trim(query) == "" ->
+          assign(socket, trigram: [], fts: [], semantic: [])
+
+        full && query ->
+          assign(socket,
+            trigram: Wat.search_title(query, packages),
+            fts: Wat.search_doc(query, packages),
+            semantic: Wat.list_similar_content(query, packages)
+          )
+
+        query ->
+          assign(socket, trigram: Wat.search_title(query, packages), fts: [], semantic: [])
+
+        true ->
+          assign(socket, trigram: [], fts: [], semantic: [])
+      end
+
+    {:noreply, socket}
   end
 
-  defp answer(question) do
-    # search docs_fts title, doc
-    # search docs embedding
-    # search similar packages
-    """
-    nothing found for question:
+  @impl true
+  def handle_event("autocomplete", %{"query" => query}, socket) do
+    path = ~p"/?#{%{query: query, packages: socket.assigns.packages}}"
+    {:noreply, push_patch(socket, to: path, replace: true)}
+  end
 
-    #{question}
-    """
+  def handle_event("search", %{"query" => query}, socket) do
+    path = ~p"/?#{%{query: query, packages: socket.assigns.packages, full: true}}"
+    {:noreply, push_patch(socket, to: path, replace: false)}
   end
 end

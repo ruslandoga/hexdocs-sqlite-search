@@ -22,6 +22,11 @@ defmodule Wat.Application do
       # {Wat.Worker, arg}
     ]
 
+    if File.exists?("hnsw.idx") do
+      {:ok, index} = HNSWLib.Index.load_index(:cosine, 1536, "hnsw.idx")
+      :ok = :persistent_term.put(:hnsw, index)
+    end
+
     # See https://hexdocs.pm/elixir/Supervisor.html
     # for other strategies and supported options
     opts = [strategy: :one_for_one, name: Wat.Supervisor]
