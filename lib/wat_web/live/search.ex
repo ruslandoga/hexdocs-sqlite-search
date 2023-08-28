@@ -11,7 +11,7 @@ defmodule WatWeb.SearchLive do
           name="query"
           placeholder="Search..."
           value={@query}
-          class="mt-4 w-full dark:bg-zinc-500 dark:border-zinc-400"
+          class="mt-4 w-full bg-zinc-100 border-zinc-300 dark:bg-zinc-500 dark:border-zinc-400"
           phx-debounce="50"
         />
       </form>
@@ -21,14 +21,14 @@ defmodule WatWeb.SearchLive do
           <h3 class="text-center text-xs font-semibold opacity-80 uppercase">Autocomplete</h3>
 
           <ul class="mt-3 space-y-2">
-            <%= for item <- @trigram do %>
-              <li class="dark:bg-sky-700 rounded border dark:border-sky-500 overflow-y-auto hover:bg-sky-600 transition">
+            <%= for item <- @autocomplete do %>
+              <li class="dark:bg-sky-700 bg-sky-100 rounded border dark:border-sky-500 border-sky-200 overflow-y-auto hover:bg-sky-200 hover:dark:bg-sky-600 transition">
                 <a
                   href={"https://hexdocs.pm/#{item.package}/#{item.ref}"}
                   class="p-2 block w-full h-full"
                 >
                   <div class="text-sm flex justify-between">
-                    <span class="rounded px-1.5 py-0.5 dark:bg-sky-800">
+                    <span class="rounded dark:px-1.5 py-0.5 dark:bg-sky-800">
                       <%= item.package %> (<%= item.recent_downloads %>)
                     </span>
                     <span class="font-mono">Rank = <%= Float.round(item.rank, 2) %></span>
@@ -50,10 +50,10 @@ defmodule WatWeb.SearchLive do
 
           <ul class="mt-3 space-y-2">
             <%= for item <- @fts do %>
-              <li class="dark:bg-teal-700 rounded border dark:border-teal-500 overflow-y-auto hover:bg-teal-600 transition">
+              <li class="bg-teal-100 dark:bg-teal-700 rounded border border-teal-200 dark:border-teal-500 overflow-y-auto hover:bg-teal-300 dark:hover:bg-teal-600 transition">
                 <a href={"https://hexdocs.pm/#{item.package}/#{item.ref}"} class="p-2 block">
                   <div class="text-sm flex justify-between">
-                    <span class="rounded px-1.5 py-0.5 dark:bg-teal-800">
+                    <span class="rounded dark:px-1.5 py-0.5 dark:bg-teal-800">
                       <%= item.package %> (<%= item.recent_downloads %>)
                     </span>
                     <span class="font-mono">Rank = <%= Float.round(item.rank, 2) %></span>
@@ -76,10 +76,12 @@ defmodule WatWeb.SearchLive do
 
           <ul class="mt-3 space-y-2">
             <%= for item <- @semantic do %>
-              <li class="dark:bg-indigo-700 rounded border dark:border-indigo-500 overflow-y-auto hover:bg-indigo-600 transition">
+              <li class="bg-indigo-100 dark:bg-indigo-700 rounded border border-indigo-200 dark:border-indigo-500 hover:bg-indigo-300 dark:hover:bg-indigo-600 transition">
                 <a href={"https://hexdocs.pm/#{item.package}/#{item.ref}"} class="p-2 block">
                   <div class="text-sm flex justify-between">
-                    <span class="rounded px-1.5 py-0.5 dark:bg-indigo-800"><%= item.package %></span>
+                    <span class="rounded dark:px-1.5 py-0.5 dark:bg-indigo-800">
+                      <%= item.package %>
+                    </span>
                     <span class="font-mono">
                       Cosine similarity = <%= Float.round(item.similarity, 2) %>
                     </span>
@@ -111,7 +113,7 @@ defmodule WatWeb.SearchLive do
 
   @impl true
   def mount(_params, _session, socket) do
-    {:ok, assign(socket, trigram: [], fts: [], semantic: [])}
+    {:ok, assign(socket, autocomplete: [], fts: [], semantic: [])}
   end
 
   @impl true
@@ -136,20 +138,20 @@ defmodule WatWeb.SearchLive do
     socket =
       cond do
         query && String.trim(query) == "" ->
-          assign(socket, trigram: [], fts: [], semantic: [])
+          assign(socket, autocomplete: [], fts: [], semantic: [])
 
         full && query ->
           assign(socket,
-            trigram: Wat.search_title(query, packages),
-            fts: Wat.search_doc(query, packages),
+            autocomplete: Wat.autocomplete(query, packages),
+            fts: Wat.fts(query, packages),
             semantic: Wat.list_similar_content(query, packages)
           )
 
         query ->
-          assign(socket, trigram: Wat.search_title(query, packages), fts: [], semantic: [])
+          assign(socket, autocomplete: Wat.autocomplete(query, packages), fts: [], semantic: [])
 
         true ->
-          assign(socket, trigram: [], fts: [], semantic: [])
+          assign(socket, autocomplete: [], fts: [], semantic: [])
       end
 
     {:noreply, socket}

@@ -75,6 +75,8 @@ defmodule Dev do
   # │ type          │
   # └───────────────┘
 
+  # bench the search query against autocomplete with UNINDEXED package column
+
   def populate_autocomplete do
     Repo.transaction(fn ->
       Repo.query!("drop table if exists autocomplete")
@@ -254,49 +256,26 @@ defmodule Dev do
     end
   end
 
-  # def populate_docs_title_fts do
-  #   Repo.query(
-  #     """
-  #     insert into docs_title_fts(rowid, title)
-  #       select id, title from docs
-  #       where instr(title, ' ') > 0 and type in ('function');
-  #     """,
-  #     timeout: :infinity
-  #   )
+  def populate_fts do
+    Repo.transaction(fn ->
+      Repo.query!("drop table if exists fts")
 
-  #   Repo.transaction(fn ->
-  #     "docs"
-  #     |> select([d], map(d, [:id, :title, :type]))
-  #     |> where([d], d.type in ["macro", "callback", "behaviour"])
-  #     |> Repo.stream(max_rows: 1000)
-  #     |> Stream.chunk_every(1000)
-  #     |> Stream.each(fn chunk ->
-  #       indexable =
-  #         chunk
-  #         |> Enum.map(fn doc ->
-  #           case doc.type do
-  #             "task" ->
-  #               %{id: id, title: title_for_search(title)}
+      Repo.query!("""
+      create virtual table fts using fts5(
+        title, doc,
+        tokenize='porter', content='docs', content_rowid='id'
+      )
+      """)
 
-  #             t when t in ["macro", "callback"] ->
-  #               if String.contains?(doc.title, " ") do
-  #                 Map.take(doc, [:id, :title])
-  #               end
-
-  #             _other ->
-  #               Map.take(doc, [:id, :title])
-  #           end
-  #         end)
-  #         |> Enum.reject(&is_nil/1)
-
-  #       Repo.insert_all("docs_title_fts", indexable)
-  #     end)
-  #     |> Stream.run()
-  #   end)
-  # end
-
-  # def populate_docs_doc_fts do
-  # end
+      Repo.query!(
+        """
+        insert into fts(rowid, title, doc) select id, title, doc from docs
+        """,
+        [],
+        timeout: :infinity
+      )
+    end)
+  end
 
   def populate_embeddings do
     {:ok, sup} = Task.Supervisor.start_link()

@@ -121,7 +121,7 @@ defmodule Wat do
     |> Wat.Repo.update_all(set: [embedding: encode_embedding(embedding)])
   end
 
-  def search_title(query, packages) do
+  def autocomplete(query, packages) do
     import Ecto.Query
 
     "docs"
@@ -133,6 +133,7 @@ defmodule Wat do
       id: d.id,
       package: d.package,
       ref: d.ref,
+      # title: fragment("snippet(autocomplete, 0, '<b><i>', '</i></b>', '...', 100)"),
       title: d.title,
       rank: fragment("rank"),
       recent_downloads: p.recent_downloads
@@ -142,21 +143,21 @@ defmodule Wat do
     |> Wat.Repo.all()
   end
 
-  def search_doc(query, packages) do
+  def fts(query, packages) do
     import Ecto.Query
 
     "docs"
     |> maybe_limit_packages(packages)
-    |> join(:inner, [d], f in "docs_doc_fts", on: d.id == f.rowid)
+    |> join(:inner, [d], f in "fts", on: d.id == f.rowid)
     |> join(:inner, [d], p in "packages", on: d.package == p.name)
-    |> where([d, f], fragment("docs_doc_fts MATCH ?", ^clean_query(query)))
+    |> where([d, f], fragment("fts MATCH ?", ^clean_query(query)))
     |> select([d, f, p], %{
       id: d.id,
       package: d.package,
       ref: d.ref,
-      title: fragment("snippet(docs_doc_fts, 0, '<b><i>', '</i></b>', '...', 64)"),
-      doc: fragment("snippet(docs_doc_fts, 1, '<b><i>', '</i></b>', '...', 100)"),
-      rank: fragment("round(rank)") - p.recent_downloads / 100_000,
+      title: fragment("snippet(fts, 0, '<b><i>', '</i></b>', '...', 64)"),
+      doc: fragment("snippet(fts, 1, '<b><i>', '</i></b>', '...', 100)"),
+      rank: fragment("rank"),
       recent_downloads: p.recent_downloads
     })
     |> order_by([_, _, p], fragment("round(rank)") - p.recent_downloads / 100_000)
