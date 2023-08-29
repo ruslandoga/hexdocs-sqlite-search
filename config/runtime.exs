@@ -34,12 +34,7 @@ config :wat, Wat.Repo,
 #   end
 
 if(config_env() == :prod) do
-  database_path =
-    System.get_env("DATABASE_PATH") ||
-      raise """
-      environment variable DATABASE_PATH is missing.
-      For example: /etc/wat/wat.db
-      """
+  database_path = System.get_env("DATABASE_PATH") || "/app/wat.db"
 
   config :wat, Wat.Repo,
     database: database_path,
@@ -74,8 +69,5 @@ if(config_env() == :prod) do
 end
 
 if config_env() in [:dev, :prod] do
-  # openapi
-  openai_api_key = System.fetch_env!("OPENAI_API_KEY")
-
-  config :wat, openai_api_key: openai_api_key
+  config :wat, openai_api_key: System.fetch_env!("OPENAI_API_KEY")
 end

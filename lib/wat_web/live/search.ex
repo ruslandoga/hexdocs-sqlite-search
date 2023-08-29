@@ -31,11 +31,11 @@ defmodule WatWeb.SearchLive do
                     <span class="rounded dark:px-1.5 py-0.5 dark:bg-sky-800">
                       <%= item.package %> (<%= item.recent_downloads %>)
                     </span>
-                    <span class="font-mono">Rank = <%= Float.round(item.rank, 2) %></span>
+                    <span class="font-mono">BM25 = <%= abs(Float.round(item.rank, 2)) %></span>
                   </div>
 
                   <div class="mt-2">
-                    <span class="text-sm font-mono font-semibold"><%= item.title %></span>
+                    <span class="text-sm font-mono font-semibold"><%= raw(item.title) %></span>
                   </div>
                 </a>
               </li>
@@ -56,7 +56,7 @@ defmodule WatWeb.SearchLive do
                     <span class="rounded dark:px-1.5 py-0.5 dark:bg-teal-800">
                       <%= item.package %> (<%= item.recent_downloads %>)
                     </span>
-                    <span class="font-mono">Rank = <%= Float.round(item.rank, 2) %></span>
+                    <span class="font-mono">BM25 = <%= abs(Float.round(item.rank, 2)) %></span>
                   </div>
 
                   <div class="mt-2">
@@ -119,36 +119,21 @@ defmodule WatWeb.SearchLive do
   @impl true
   def handle_params(params, _uri, socket) do
     query = params["query"]
-    full = !!params["full"]
-
-    packages =
-      cond do
-        packages = params["packages"] ->
-          if is_list(packages), do: packages, else: String.split(packages, ",")
-
-        package = params["package"] ->
-          [package]
-
-        true ->
-          []
-      end
-
-    socket = assign(socket, query: query, packages: packages)
+    socket = assign(socket, query: query)
 
     socket =
       cond do
         query && String.trim(query) == "" ->
           assign(socket, autocomplete: [], fts: [], semantic: [])
 
-        full && query ->
+        query ->
+          %{query: query, packages: packages} = Wat.parse_query(query)
+
           assign(socket,
             autocomplete: Wat.autocomplete(query, packages),
             fts: Wat.fts(query, packages),
             semantic: Wat.list_similar_content(query, packages)
           )
-
-        query ->
-          assign(socket, autocomplete: Wat.autocomplete(query, packages), fts: [], semantic: [])
 
         true ->
           assign(socket, autocomplete: [], fts: [], semantic: [])
@@ -159,12 +144,15 @@ defmodule WatWeb.SearchLive do
 
   @impl true
   def handle_event("autocomplete", %{"query" => query}, socket) do
-    path = ~p"/?#{%{query: query, packages: socket.assigns.packages}}"
-    {:noreply, push_patch(socket, to: path, replace: true)}
+    %{packages: packages, query: query} = Wat.parse_query(query)
+
+    socket =
+      assign(socket, autocomplete: Wat.autocomplete(query, packages), fts: [], semantic: [])
+
+    {:noreply, socket}
   end
 
   def handle_event("search", %{"query" => query}, socket) do
-    path = ~p"/?#{%{query: query, packages: socket.assigns.packages, full: true}}"
-    {:noreply, push_patch(socket, to: path, replace: false)}
+    {:noreply, push_patch(socket, to: ~p"/?#{%{query: query}}")}
   end
 end

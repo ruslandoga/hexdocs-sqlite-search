@@ -88,144 +88,32 @@ defmodule Dev do
       )
       """)
 
-      populate_autocomplete_behaviour()
-      populate_autocomplete_callback()
-      populate_autocomplete_exception()
-      populate_autocomplete_extras()
-      populate_autocomplete_function()
-      populate_autocomplete_macro()
-      populate_autocomplete_macrocallback()
-      populate_autocomplete_module()
-      populate_autocomplete_opaque()
-      populate_autocomplete_protocol()
-      populate_autocomplete_task()
-      populate_autocomplete_type()
+      Repo.query!(
+        """
+        insert into autocomplete(rowid, title)
+          select id, title from docs
+            where type in ('behaviour', 'callback', 'exception', 'function', 'macro', 'macrocallback', 'opaque', 'type')
+              and instr(title, ' ') = 0
+        """,
+        timeout: :infinity
+      )
+
+      "docs"
+      |> where([d], d.type in ["extras", "module", "protocol"])
+      |> select([d], %{rowid: d.id, title: d.title})
+      |> Repo.stream(max_rows: 1000)
+      |> Stream.map(fn doc -> Map.update!(doc, :title, &extras_title/1) end)
+      |> Stream.chunk_every(1000)
+      |> Enum.each(&Repo.insert_all("autocomplete", &1))
+
+      "docs"
+      |> where(type: "task")
+      |> select([d], %{rowid: d.id, title: d.title})
+      |> Repo.stream(max_rows: 1000)
+      |> Stream.map(fn doc -> Map.update!(doc, :title, &extract_task/1) end)
+      |> Stream.chunk_every(1000)
+      |> Enum.each(&Repo.insert_all("autocomplete", &1))
     end)
-  end
-
-  def populate_autocomplete_behaviour do
-    Repo.query!(
-      """
-      insert into autocomplete(rowid, title)
-        select id, title from docs
-          where type = 'behaviour' and instr(title, ' ') = 0
-      """,
-      timeout: :infinity
-    )
-  end
-
-  def populate_autocomplete_callback do
-    "docs"
-    |> where(type: "callback")
-    |> where([d], fragment("instr(?, ' ')", d.title) == 0)
-    |> select([d], %{rowid: d.id, title: d.title})
-    |> Repo.stream(max_rows: 1000)
-    |> Stream.map(fn doc -> Map.update!(doc, :title, &extract_function/1) end)
-    |> Stream.chunk_every(1000)
-    |> Enum.each(&Repo.insert_all("autocomplete", &1))
-  end
-
-  def populate_autocomplete_exception do
-    Repo.query!("""
-    insert into autocomplete(rowid, title)
-      select id, title from docs
-        where type = 'exception' and instr(title, ' ') = 0
-    """)
-  end
-
-  def populate_autocomplete_extras do
-    "docs"
-    |> where(type: "extras")
-    |> select([d], %{rowid: d.id, title: d.title})
-    |> Repo.stream(max_rows: 1000)
-    |> Stream.map(fn doc -> Map.update!(doc, :title, &extras_title/1) end)
-    |> Stream.chunk_every(1000)
-    |> Enum.each(&Repo.insert_all("autocomplete", &1))
-  end
-
-  def populate_autocomplete_function do
-    "docs"
-    |> where(type: "function")
-    |> where([d], fragment("instr(?, ' ')", d.title) == 0)
-    |> select([d], %{rowid: d.id, title: d.title})
-    |> Repo.stream(max_rows: 1000)
-    |> Stream.map(fn doc -> Map.update!(doc, :title, &extract_function/1) end)
-    |> Stream.chunk_every(1000)
-    |> Enum.each(&Repo.insert_all("autocomplete", &1))
-  end
-
-  def populate_autocomplete_macro do
-    "docs"
-    |> where(type: "macro")
-    |> where([d], fragment("instr(?, ' ')", d.title) == 0)
-    |> select([d], %{rowid: d.id, title: d.title})
-    |> Repo.stream(max_rows: 1000)
-    |> Stream.map(fn doc -> Map.update!(doc, :title, &extract_function/1) end)
-    |> Stream.chunk_every(1000)
-    |> Enum.each(&Repo.insert_all("autocomplete", &1))
-  end
-
-  def populate_autocomplete_macrocallback do
-    "docs"
-    |> where(type: "macrocallback")
-    |> where([d], fragment("instr(?, ' ')", d.title) == 0)
-    |> select([d], %{rowid: d.id, title: d.title})
-    |> Repo.stream(max_rows: 1000)
-    |> Stream.map(fn doc -> Map.update!(doc, :title, &extract_function/1) end)
-    |> Stream.chunk_every(1000)
-    |> Enum.each(&Repo.insert_all("autocomplete", &1))
-  end
-
-  def populate_autocomplete_module do
-    "docs"
-    |> where(type: "module")
-    |> select([d], %{rowid: d.id, title: d.title})
-    |> Repo.stream(max_rows: 1000)
-    |> Stream.map(fn doc -> Map.update!(doc, :title, &extras_title/1) end)
-    |> Stream.chunk_every(1000)
-    |> Enum.each(&Repo.insert_all("autocomplete", &1))
-  end
-
-  def populate_autocomplete_opaque do
-    "docs"
-    |> where(type: "opaque")
-    |> where([d], fragment("instr(?, ' ')", d.title) == 0)
-    |> select([d], %{rowid: d.id, title: d.title})
-    |> Repo.stream(max_rows: 1000)
-    |> Stream.map(fn doc -> Map.update!(doc, :title, &extract_function/1) end)
-    |> Stream.chunk_every(1000)
-    |> Enum.each(&Repo.insert_all("autocomplete", &1))
-  end
-
-  def populate_autocomplete_protocol do
-    "docs"
-    |> where(type: "protocol")
-    |> select([d], %{rowid: d.id, title: d.title})
-    |> Repo.stream(max_rows: 1000)
-    |> Stream.map(fn doc -> Map.update!(doc, :title, &extras_title/1) end)
-    |> Stream.chunk_every(1000)
-    |> Enum.each(&Repo.insert_all("autocomplete", &1))
-  end
-
-  def populate_autocomplete_task do
-    "docs"
-    |> where(type: "task")
-    |> select([d], %{rowid: d.id, title: d.title})
-    |> Repo.stream(max_rows: 1000)
-    |> Stream.map(fn doc -> Map.update!(doc, :title, &extract_task/1) end)
-    |> Stream.chunk_every(1000)
-    |> Enum.each(&Repo.insert_all("autocomplete", &1))
-  end
-
-  def populate_autocomplete_type do
-    "docs"
-    |> where(type: "type")
-    |> where([d], fragment("instr(?, ' ')", d.title) == 0)
-    |> select([d], %{rowid: d.id, title: d.title})
-    |> Repo.stream(max_rows: 1000)
-    |> Stream.map(fn doc -> Map.update!(doc, :title, &extract_function/1) end)
-    |> Stream.chunk_every(1000)
-    |> Enum.each(&Repo.insert_all("autocomplete", &1))
   end
 
   defp extras_title(title) do
@@ -233,10 +121,6 @@ defmodule Dev do
       [title] -> title
       parts -> Enum.drop(parts, -1)
     end
-  end
-
-  defp extract_function(title) do
-    title |> String.split(".") |> List.last()
   end
 
   defp extract_task(title) do
@@ -274,6 +158,69 @@ defmodule Dev do
         [],
         timeout: :infinity
       )
+    end)
+  end
+
+  def packages_graph do
+    "packages_edges"
+    |> select([e], {e.source, e.target})
+    |> order_by([e], e.source)
+    |> Repo.all()
+    |> Enum.reduce(Graph.new(), fn {source, target}, graph ->
+      graph
+      |> Graph.add_vertex(source)
+      |> Graph.add_vertex(target)
+      |> Graph.add_edge(source, target)
+    end)
+  end
+
+  def neighbors(graph, packages, degree \\ 1, count) do
+    wider_packages =
+      Enum.reduce(packages, packages, fn {package, _info}, acc ->
+        Enum.reduce(
+          Graph.neighbors(graph, package),
+          acc,
+          fn package, acc ->
+            Map.put_new(acc, package, %{degree: degree})
+          end
+        )
+      end)
+
+    cond do
+      map_size(packages) == map_size(wider_packages) ->
+        sort_by_downloads(wider_packages, count)
+
+      map_size(wider_packages) >= count ->
+        sort_by_downloads(wider_packages, count)
+
+      true ->
+        neighbors(graph, wider_packages, degree + 1, count)
+    end
+  end
+
+  def sort_by_downloads(packages, count) do
+    downloads = add_downloads(Map.keys(packages))
+
+    packages
+    |> Enum.map(fn {package, info} ->
+      recent_downloads = Map.get(downloads, package)
+
+      {package,
+       info
+       |> Map.put(:recent_downloads, recent_downloads || 0)
+       |> Map.put(:score, (recent_downloads || 1) / :math.pow(10, info.degree))}
+    end)
+    |> Enum.sort_by(fn {_package, info} -> info.score end, :desc)
+    |> Enum.take(count)
+  end
+
+  def add_downloads(packages) when is_list(packages) do
+    "packages"
+    |> where([p], p.name in ^packages)
+    |> select([p], map(p, [:name, :recent_downloads]))
+    |> Repo.all()
+    |> Map.new(fn %{name: name, recent_downloads: recent_downloads} ->
+      {name, recent_downloads}
     end)
   end
 

@@ -50,7 +50,8 @@ defmodule Wat.MixProject do
       {:plug_cowboy, "~> 2.5"},
       {:earmark, "~> 1.4"},
       # {:sqlite_vss, "~> 0.1.2"}
-      {:hnswlib, github: "elixir-nx/hnswlib"}
+      {:hnswlib, github: "elixir-nx/hnswlib"},
+      {:libgraph, "~> 0.16.0"}
     ]
   end
 

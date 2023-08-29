@@ -39,7 +39,13 @@ defmodule Wat do
         "docs"
         |> where([d], d.id in ^ids)
         |> maybe_limit_packages(packages)
-        |> select([d], map(d, [:id, :title, :ref, :package, :doc]))
+        |> select([d], %{
+          id: d.id,
+          title: d.title,
+          ref: d.ref,
+          package: d.package,
+          doc: fragment("substr(?, 0, 300)", d.doc)
+        })
         |> Wat.Repo.all()
         |> Map.new(fn %{id: id} = doc -> {id, doc} end)
 
@@ -47,7 +53,11 @@ defmodule Wat do
       |> Enum.zip(dists)
       |> Enum.map(fn {id, dist} ->
         if doc = Map.get(docs, id) do
-          Map.put(doc, :similarity, 1 - dist)
+          doc
+          |> Map.put(:similarity, 1 - dist)
+          |> Map.update!(:doc, fn doc ->
+            if byte_size(doc) == 299, do: doc <> "...", else: doc
+          end)
         end
       end)
       |> Enum.reject(&is_nil/1)
@@ -121,13 +131,27 @@ defmodule Wat do
     |> Wat.Repo.update_all(set: [embedding: encode_embedding(embedding)])
   end
 
+  def parse_query(query) do
+    query
+    |> String.split()
+    |> Enum.reduce(%{packages: [], query: []}, fn word, acc ->
+      case word do
+        "#" <> package -> Map.update!(acc, :packages, fn prev -> [package | prev] end)
+        _ -> Map.update!(acc, :query, fn prev -> [word | prev] end)
+      end
+    end)
+    |> Map.update!(:query, fn words ->
+      words |> IO.inspect() |> :lists.reverse() |> Enum.join(" ")
+    end)
+  end
+
   def autocomplete(query, packages) do
     import Ecto.Query
 
     "docs"
     |> maybe_limit_packages(packages)
     |> join(:inner, [d], t in "autocomplete", on: d.id == t.rowid)
-    |> join(:inner, [d], p in "packages", on: d.package == p.name and p.recent_downloads > 100)
+    |> join(:inner, [d], p in "packages", on: d.package == p.name and p.recent_downloads > 1000)
     |> where([d, t], fragment("? MATCH ?", t.title, ^clean_query(query)))
     |> select([d, t, p], %{
       id: d.id,
@@ -138,7 +162,7 @@ defmodule Wat do
       rank: fragment("rank"),
       recent_downloads: p.recent_downloads
     })
-    |> order_by([_, _, p], [fragment("round(rank)"), desc: p.recent_downloads])
+    |> order_by([_, _, p], fragment("rank") - p.recent_downloads / 1_200_000)
     |> limit(25)
     |> Wat.Repo.all()
   end
@@ -155,12 +179,12 @@ defmodule Wat do
       id: d.id,
       package: d.package,
       ref: d.ref,
-      title: fragment("snippet(fts, 0, '<b><i>', '</i></b>', '...', 64)"),
-      doc: fragment("snippet(fts, 1, '<b><i>', '</i></b>', '...', 100)"),
-      rank: fragment("rank"),
+      title: fragment("snippet(fts, 0, '<b><i>', '</i></b>', '...', 10)"),
+      doc: fragment("snippet(fts, 1, '<b><i>', '</i></b>', '...', 50)"),
+      rank: fragment("bm25(fts, 20, 1)"),
       recent_downloads: p.recent_downloads
     })
-    |> order_by([_, _, p], fragment("round(rank)") - p.recent_downloads / 100_000)
+    |> order_by([_, _, p], fragment("bm25(fts, 20, 1)") - p.recent_downloads / 2_000_000)
     |> limit(20)
     |> Wat.Repo.all()
   end
