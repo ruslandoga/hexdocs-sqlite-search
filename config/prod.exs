@@ -7,8 +7,8 @@ import Config
 # before starting your production server.
 config :wat, WatWeb.Endpoint, cache_static_manifest: "priv/static/cache_manifest.json"
 
-# Do not print debug messages in production
-config :logger, level: :info
+# Do not print debug/info messages in production
+config :logger, level: :warn
 
 # Runtime production configuration, including reading
 # of environment variables, is done on config/runtime.exs.

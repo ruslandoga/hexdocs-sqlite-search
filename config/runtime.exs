@@ -33,7 +33,7 @@ config :wat, Wat.Repo,
 #     Exqlite.Basic.load_extension(conn, SqliteVss.loadable_path_vss0())
 #   end
 
-if(config_env() == :prod) do
+if config_env() == :prod do
   database_path = System.get_env("DATABASE_PATH") || "/app/wat.db"
 
   config :wat, Wat.Repo,

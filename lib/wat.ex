@@ -141,7 +141,7 @@ defmodule Wat do
       end
     end)
     |> Map.update!(:query, fn words ->
-      words |> IO.inspect() |> :lists.reverse() |> Enum.join(" ")
+      words |> :lists.reverse() |> Enum.join(" ")
     end)
   end
 
