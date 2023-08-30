@@ -41,8 +41,8 @@ FROM alpine:3.18.3 AS artifacts
 RUN apk add curl lz4
 WORKDIR /export
 RUN curl -O https://hexdocs-artifacts.s3.eu-central-003.backblazeb2.com/hnsw.idx
-RUN curl -O https://hexdocs-artifacts.s3.eu-central-003.backblazeb2.com/wat_dev.db.lz4
-RUN lz4 --rm wat_dev.db.lz4 wat.db
+RUN curl -O https://hexdocs-artifacts.s3.eu-central-003.backblazeb2.com/wat.db.lz4
+RUN lz4 --rm wat.db.lz4 wat.db
 
 # start a new build stage so that the final image will only contain
 # the compiled release and other runtime necessities
