@@ -103,7 +103,6 @@ defmodule WatWeb.SearchLive do
 
   # TODO
   # package relations, ranking
-  # deploy demo
   # read sqlite fts5 docs
   # read lunr.js docs, and ex_doc usage
   # improve autocomplete search (make it similar to ex_doc)
@@ -127,12 +126,12 @@ defmodule WatWeb.SearchLive do
           assign(socket, autocomplete: [], fts: [], semantic: [])
 
         query ->
-          %{query: query, packages: packages} = Wat.parse_query(query)
+          %{query: query, packages: packages, anchor: anchor} = Wat.parse_query(query)
 
           assign(socket,
-            autocomplete: Wat.autocomplete(query, packages),
-            fts: Wat.fts(query, packages),
-            semantic: Wat.list_similar_content(query, packages)
+            autocomplete: Wat.autocomplete(query, packages, anchor),
+            fts: Wat.fts(query, packages, anchor),
+            semantic: Wat.list_similar_content(query, packages, anchor)
           )
 
         true ->
@@ -144,10 +143,14 @@ defmodule WatWeb.SearchLive do
 
   @impl true
   def handle_event("autocomplete", %{"query" => query}, socket) do
-    %{packages: packages, query: query} = Wat.parse_query(query)
+    %{query: query, packages: packages, anchor: anchor} = Wat.parse_query(query)
 
     socket =
-      assign(socket, autocomplete: Wat.autocomplete(query, packages), fts: [], semantic: [])
+      assign(socket,
+        autocomplete: Wat.autocomplete(query, packages, anchor),
+        fts: [],
+        semantic: []
+      )
 
     {:noreply, socket}
   end

@@ -80,6 +80,7 @@ defmodule Dev do
   def populate_autocomplete do
     Repo.transaction(fn ->
       Repo.query!("drop table if exists autocomplete")
+      # Repo.query!("drop table if exists autocomplete_for_spellfix")
 
       Repo.query!("""
       create virtual table autocomplete using fts5(
@@ -95,6 +96,7 @@ defmodule Dev do
             where type in ('behaviour', 'callback', 'exception', 'function', 'macro', 'macrocallback', 'opaque', 'type')
               and instr(title, ' ') = 0
         """,
+        [],
         timeout: :infinity
       )
 
@@ -113,6 +115,62 @@ defmodule Dev do
       |> Stream.map(fn doc -> Map.update!(doc, :title, &extract_task/1) end)
       |> Stream.chunk_every(1000)
       |> Enum.each(&Repo.insert_all("autocomplete", &1))
+    end)
+  end
+
+  def populate_autocomplete_spellfix do
+    Repo.transaction(fn ->
+      Repo.query!("drop table if exists autocomplete_for_spellfix")
+      Repo.query!("drop table if exists autocomplete_vocab")
+      Repo.query!("drop table if exists autocomplete_spellfix")
+
+      Repo.query!("""
+      create virtual table autocomplete_for_spellfix using fts5(title)
+      """)
+
+      Repo.query!(
+        """
+        insert into autocomplete_for_spellfix(title)
+          select title from docs
+            where type in ('behaviour', 'callback', 'exception', 'function', 'macro', 'macrocallback', 'opaque', 'type')
+              and instr(title, ' ') = 0
+        """,
+        [],
+        timeout: :infinity
+      )
+
+      "docs"
+      |> where([d], d.type in ["extras", "module", "protocol"])
+      |> select([d], %{title: d.title})
+      |> Repo.stream(max_rows: 1000)
+      |> Stream.map(fn doc -> Map.update!(doc, :title, &extras_title/1) end)
+      |> Stream.chunk_every(1000)
+      |> Enum.each(&Repo.insert_all("autocomplete_for_spellfix", &1))
+
+      "docs"
+      |> where(type: "task")
+      |> select([d], %{title: d.title})
+      |> Repo.stream(max_rows: 1000)
+      |> Stream.map(fn doc -> Map.update!(doc, :title, &extract_task/1) end)
+      |> Stream.chunk_every(1000)
+      |> Enum.each(&Repo.insert_all("autocomplete_for_spellfix", &1))
+
+      Repo.query!("""
+      create virtual table autocomplete_vocab using fts5vocab('autocomplete_for_spellfix', 'row')
+      """)
+
+      Repo.query!("""
+      create virtual table autocomplete_spellfix using spellfix1();
+      """)
+
+      Repo.query!("""
+      insert into autocomplete_spellfix(rank, word) select doc, term from autocomplete_vocab where doc > 1;
+      """)
+
+      Repo.query!("drop table autocomplete_for_spellfix")
+      Repo.query!("drop table autocomplete_vocab")
+      Repo.query!("vacuum")
+      Repo.query!("pragma wal_checkpoint(truncate)")
     end)
   end
 
@@ -174,55 +232,175 @@ defmodule Dev do
     end)
   end
 
-  def neighbors(graph, packages, degree \\ 1, count) do
-    wider_packages =
-      Enum.reduce(packages, packages, fn {package, _info}, acc ->
-        Enum.reduce(
-          Graph.neighbors(graph, package),
-          acc,
-          fn package, acc ->
-            Map.put_new(acc, package, %{degree: degree})
-          end
-        )
+  def neighbors(graph, package, degrees) do
+    do_neighbors(graph, %{package => 0}, degrees + 1, _degree = 1)
+  end
+
+  def do_neighbors(_graph, neighbors, degree, degree) do
+    Enum.group_by(
+      neighbors,
+      fn {_package, degree} -> degree end,
+      fn {package, _degree} -> package end
+    )
+  end
+
+  def do_neighbors(graph, neighbors, degrees, degree) do
+    new_neighbors =
+      neighbors
+      |> Map.keys()
+      |> Enum.reduce(neighbors, fn package, acc ->
+        graph
+        |> Graph.neighbors(package)
+        |> Enum.reduce(acc, fn package, acc -> Map.put_new(acc, package, degree) end)
       end)
 
-    cond do
-      map_size(packages) == map_size(wider_packages) ->
-        sort_by_downloads(wider_packages, count)
-
-      map_size(wider_packages) >= count ->
-        sort_by_downloads(wider_packages, count)
-
-      true ->
-        neighbors(graph, wider_packages, degree + 1, count)
+    if map_size(new_neighbors) == map_size(neighbors) do
+      do_neighbors(graph, new_neighbors, degrees, degrees)
+    else
+      do_neighbors(graph, new_neighbors, degrees, degree + 1)
     end
   end
 
-  def sort_by_downloads(packages, count) do
-    downloads = add_downloads(Map.keys(packages))
+  # def neighbors(graph, packages, degree \\ 1, degrees) do
+  #   wider_packages =
+  #     Enum.reduce(packages, packages, fn {package, _info}, acc ->
+  #       Enum.reduce(
+  #         Graph.neighbors(graph, package),
+  #         acc,
+  #         fn package, acc ->
+  #           Map.put_new(acc, package, %{degree: degree})
+  #         end
+  #       )
+  #     end)
 
-    packages
-    |> Enum.map(fn {package, info} ->
-      recent_downloads = Map.get(downloads, package)
+  #   cond do
+  #     map_size(packages) == map_size(wider_packages) ->
+  #       sort_by_downloads(wider_packages, count)
 
-      {package,
-       info
-       |> Map.put(:recent_downloads, recent_downloads || 0)
-       |> Map.put(:score, (recent_downloads || 1) / :math.pow(10, info.degree))}
+  #     map_size(wider_packages) >= count ->
+  #       sort_by_downloads(wider_packages, count)
+
+  #     true ->
+  #       neighbors(graph, wider_packages, degree + 1, count)
+  #   end
+  # end
+
+  def with_downloads(packages) when is_map(packages) do
+    Map.new(packages, fn {degree, packages} ->
+      {degree, with_downloads(packages, min_downloads(degree))}
     end)
-    |> Enum.sort_by(fn {_package, info} -> info.score end, :desc)
-    |> Enum.take(count)
   end
 
-  def add_downloads(packages) when is_list(packages) do
+  def with_downloads(packages, min_downloads) when is_list(packages) do
     "packages"
     |> where([p], p.name in ^packages)
+    |> where([p], p.recent_downloads > ^min_downloads)
     |> select([p], map(p, [:name, :recent_downloads]))
+    |> order_by([p], desc: p.recent_downloads)
     |> Repo.all()
-    |> Map.new(fn %{name: name, recent_downloads: recent_downloads} ->
-      {name, recent_downloads}
+  end
+
+  def similarly_named(package) do
+    prefix = package <> "\\_%"
+    infix = "%\\_" <> package <> "\\_%"
+    suffix = "%\\_" <> package
+
+    "packages"
+    |> where([p], p.name != ^package)
+    |> where([p], p.recent_downloads > 10)
+    |> where(
+      [p],
+      fragment("? like ? escape '\\'", p.name, ^prefix) or
+        fragment("? like ? escape '\\'", p.name, ^infix) or
+        fragment("? like ? escape '\\'", p.name, ^suffix)
+    )
+    |> select([p], p.name)
+    |> order_by([p], desc: p.recent_downloads)
+    |> Repo.all()
+  end
+
+  def similarly_named_connected(graph, package) do
+    package
+    |> similarly_named()
+    |> Enum.filter(fn similar_package -> connected?(graph, package, similar_package) end)
+  end
+
+  @stdlib ["ex_unit", "logger", "eex"]
+
+  def connected?(graph, package1, package2) do
+    if package1 in @stdlib or package2 in @stdlib do
+      true
+    else
+      case Graph.get_paths(graph, package1, package2) do
+        [] ->
+          case Graph.get_paths(graph, package2, package1) do
+            [] -> false
+            [_ | _] -> true
+          end
+
+        [_ | _] ->
+          true
+      end
+    end
+  end
+
+  def populate_similarly_named_groups(graph) do
+    "packages"
+    |> select([p], p.name)
+    |> where([p], p.recent_downloads > 1000)
+    |> Repo.all()
+    |> Enum.reduce([], fn package, acc ->
+      case similarly_named(package) do
+        [] -> acc
+        [_ | _] = similar -> [{package, similar} | acc]
+      end
+    end)
+    # invert
+    |> Enum.flat_map(fn {group, packages} ->
+      Enum.map(packages, fn package -> {package, group} end)
+    end)
+    |> Enum.group_by(
+      fn {package, _} -> package end,
+      fn {_, group} -> group end
+    )
+    # deduplicate
+    |> Enum.map(fn {package, group} = mapping ->
+      case group do
+        [_only_one] = _good -> mapping
+        [_ | _] -> {package, deduplicate_group(package, group, graph)}
+      end
     end)
   end
+
+  defp deduplicate_group(package, group, graph) do
+    # 0. filter only connected packages
+    connected_group = Enum.filter(group, fn group -> connected?(graph, group, package) end)
+
+    if group != connected_group do
+      IO.inspect([before: group, after: connected_group], label: package)
+    end
+
+    # 1. find smallest common name
+    # e.g. "phoenix" is smallest common for ["phoenix", "phoenix_pubsub"]
+    smallest_group =
+      Enum.reject(connected_group, fn package ->
+        Enum.any?(connected_group, fn maybe_smaller_package ->
+          String.contains?(package, maybe_smaller_package)
+        end)
+      end)
+
+    if smallest_group != connected_group do
+      IO.inspect([before: group, after: connected_group], label: package)
+    end
+
+    smallest_group
+  end
+
+  defp min_downloads(0), do: 1
+  defp min_downloads(1), do: 100
+  defp min_downloads(2), do: 15000
+  defp min_downloads(3), do: 1_000_000
+  defp min_downloads(4), do: 3_000_000
 
   def populate_embeddings do
     {:ok, sup} = Task.Supervisor.start_link()

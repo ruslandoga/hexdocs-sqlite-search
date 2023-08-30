@@ -7,6 +7,8 @@ defmodule Wat do
   if it comes from the database, an external API or others.
   """
 
+  import Ecto.Query
+
   @app :wat
 
   env_keys = [
@@ -17,17 +19,15 @@ defmodule Wat do
     def unquote(key)(), do: Application.fetch_env!(@app, unquote(key))
   end
 
-  def list_similar_content(content, packages \\ [])
+  def list_similar_content(content, packages \\ [], anchor \\ nil)
 
-  def list_similar_content(content, packages) when is_binary(content) do
+  def list_similar_content(content, packages, anchor) when is_binary(content) do
     content
     |> OpenAI.embedding()
-    |> list_similar_content(packages)
+    |> list_similar_content(packages, anchor)
   end
 
-  def list_similar_content(embedding, packages) when is_list(embedding) do
-    import Ecto.Query
-
+  def list_similar_content(embedding, packages, _anchor = nil) when is_list(embedding) do
     %HNSWLib.Index{} = index = :persistent_term.get(:hnsw)
 
     with {:ok, labels, dists} <-
@@ -62,6 +62,10 @@ defmodule Wat do
       end)
       |> Enum.reject(&is_nil/1)
     end
+  end
+
+  def list_similar_content(embedding, _packages, _anchor) when is_list(embedding) do
+    []
   end
 
   # def list_similar_content(embedding, packages) when is_list(embedding) do
@@ -124,8 +128,6 @@ defmodule Wat do
   end
 
   def update_embedding(id, embedding) do
-    import Ecto.Query
-
     EmbeddedDoc
     |> where(id: ^id)
     |> Wat.Repo.update_all(set: [embedding: encode_embedding(embedding)])
@@ -134,9 +136,10 @@ defmodule Wat do
   def parse_query(query) do
     query
     |> String.split()
-    |> Enum.reduce(%{packages: [], query: []}, fn word, acc ->
+    |> Enum.reduce(%{packages: [], query: [], anchor: nil}, fn word, acc ->
       case word do
         "#" <> package -> Map.update!(acc, :packages, fn prev -> [package | prev] end)
+        "@" <> package -> %{acc | anchor: package}
         _ -> Map.update!(acc, :query, fn prev -> [word | prev] end)
       end
     end)
@@ -145,14 +148,49 @@ defmodule Wat do
     end)
   end
 
-  def autocomplete(query, packages) do
-    import Ecto.Query
+  def autocomplete(query, packages, _anchor = nil) do
+    "docs"
+    |> maybe_limit_packages(packages)
+    |> join(:inner, [d], t in "autocomplete", on: d.id == t.rowid)
+    |> join(:inner, [d], p in "packages", on: d.package == p.name and p.recent_downloads > 1000)
+    |> where([d, t], fragment("? MATCH ?", t.title, ^quote_query(query)))
+    |> select([d, t, p], %{
+      id: d.id,
+      package: d.package,
+      ref: d.ref,
+      # title: fragment("snippet(autocomplete, 0, '<b><i>', '</i></b>', '...', 100)"),
+      title: d.title,
+      rank: fragment("rank"),
+      recent_downloads: p.recent_downloads
+    })
+    |> order_by([_, _, p], fragment("rank") - p.recent_downloads / 1_200_000)
+    |> limit(25)
+    |> Wat.Repo.all()
+    |> case do
+      [] -> autocomplete_spellfix(query, packages, _anchor = nil)
+      [_ | _] = results -> results
+    end
+  end
+
+  def autocomplete(_query, _packages, _anchor) do
+    # fetch similarly named
+    # fetch close in deps graph
+    # autocomplete(query, packages)
+    # and reorder based on how close in deps graph?
+  end
+
+  def autocomplete_spellfix(query, packages, _anchor) do
+    query =
+      query
+      |> String.split(" ")
+      |> Enum.map(fn segment -> maybe_spellfix(segment) || segment end)
+      |> Enum.join(" ")
 
     "docs"
     |> maybe_limit_packages(packages)
     |> join(:inner, [d], t in "autocomplete", on: d.id == t.rowid)
     |> join(:inner, [d], p in "packages", on: d.package == p.name and p.recent_downloads > 1000)
-    |> where([d, t], fragment("? MATCH ?", t.title, ^clean_query(query)))
+    |> where([d, t], fragment("? MATCH ?", t.title, ^quote_query(query)))
     |> select([d, t, p], %{
       id: d.id,
       package: d.package,
@@ -167,36 +205,53 @@ defmodule Wat do
     |> Wat.Repo.all()
   end
 
-  def fts(query, packages) do
-    import Ecto.Query
+  def maybe_spellfix(term) do
+    "autocomplete_spellfix"
+    |> where([s], fragment("word match ? and top=5", ^term))
+    |> order_by([s], desc: s.rank)
+    |> limit(1)
+    |> select([s], map(s, [:word, :distance]))
+    |> Wat.Repo.one()
+    |> case do
+      %{word: ^term} ->
+        nil
 
+      %{word: word, distance: distance} ->
+        if distance < 200, do: word
+    end
+  end
+
+  def fts(query, packages, _anchor = nil) do
     "docs"
     |> maybe_limit_packages(packages)
     |> join(:inner, [d], f in "fts", on: d.id == f.rowid)
     |> join(:inner, [d], p in "packages", on: d.package == p.name)
-    |> where([d, f], fragment("fts MATCH ?", ^clean_query(query)))
+    |> where([d, f], fragment("fts MATCH ?", ^quote_query(query)))
     |> select([d, f, p], %{
       id: d.id,
       package: d.package,
       ref: d.ref,
       title: fragment("snippet(fts, 0, '<b><i>', '</i></b>', '...', 10)"),
       doc: fragment("snippet(fts, 1, '<b><i>', '</i></b>', '...', 50)"),
-      rank: fragment("bm25(fts, 20, 1)"),
+      rank: fragment("rank"),
       recent_downloads: p.recent_downloads
     })
-    |> order_by([_, _, p], fragment("bm25(fts, 20, 1)") - p.recent_downloads / 2_000_000)
+    |> order_by([_, _, p], fragment("rank") - p.recent_downloads / 1_200_000)
     |> limit(20)
     |> Wat.Repo.all()
+  end
+
+  def fts(_query, _packages, _anchor) do
+    []
   end
 
   defp maybe_limit_packages(query, []), do: query
 
   defp maybe_limit_packages(query, packages) do
-    import Ecto.Query
     where(query, [d], d.package in ^packages)
   end
 
-  defp clean_query(query) do
+  defp quote_query(query) do
     query
     |> String.split(" ")
     |> Enum.map(&maybe_escape_query/1)

@@ -15,5 +15,7 @@ defmodule Wat.Repo.Migrations.AddDocsFts do
             """
             drop table if exists fts
             """
+
+    execute "insert into fts(fts, rank) values('rank', 'bm25(20, 1)')"
   end
 end

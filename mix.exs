@@ -51,7 +51,8 @@ defmodule Wat.MixProject do
       {:earmark, "~> 1.4"},
       # {:sqlite_vss, "~> 0.1.2"}
       {:hnswlib, github: "elixir-nx/hnswlib"},
-      {:libgraph, "~> 0.16.0"}
+      {:libgraph, "~> 0.16.0"},
+      {:ex_sqlean, "~> 0.8.8"}
     ]
   end
 
