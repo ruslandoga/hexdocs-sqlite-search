@@ -181,6 +181,7 @@ defmodule Wat do
 
   defp autocomplete_spellfix(query, packages, _anchor) do
     # combinations: json postges -> (json postgres, json postgis)
+    # use union
     query
     |> String.split(" ")
     |> Enum.flat_map(&maybe_spellfix/1)
@@ -188,7 +189,7 @@ defmodule Wat do
       "docs"
       |> maybe_limit_packages(packages)
       |> join(:inner, [d], t in "autocomplete", on: d.id == t.rowid)
-      |> join(:inner, [d], p in "packages", on: d.package == p.name and p.recent_downloads > 1000)
+      |> join(:inner, [d], p in "packages", on: d.package == p.name and p.recent_downloads > 3000)
       |> where([d, t], fragment("? MATCH ?", t.title, ^quote_query(query)))
       |> select([d, t, p], %{
         id: d.id,
@@ -224,7 +225,7 @@ defmodule Wat do
     "docs"
     |> maybe_limit_packages(packages)
     |> join(:inner, [d], f in "fts", on: d.id == f.rowid)
-    |> join(:inner, [d], p in "packages", on: d.package == p.name)
+    |> join(:inner, [d], p in "packages", on: d.package == p.name and p.recent_downloads > 1000)
     |> where([d, f], fragment("fts MATCH ?", ^quote_query(query)))
     |> select([d, f, p], %{
       id: d.id,
@@ -256,7 +257,7 @@ defmodule Wat do
       "docs"
       |> maybe_limit_packages(packages)
       |> join(:inner, [d], f in "fts", on: d.id == f.rowid)
-      |> join(:inner, [d], p in "packages", on: d.package == p.name)
+      |> join(:inner, [d], p in "packages", on: d.package == p.name and p.recent_downloads > 3000)
       |> where([d, f], fragment("fts MATCH ?", ^quote_query(query)))
       |> select([d, f, p], %{
         id: d.id,

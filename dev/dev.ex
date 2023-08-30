@@ -221,7 +221,9 @@ defmodule Dev do
 
   def packages_graph(min_downloads \\ 1000) do
     packages_q =
-      "packages" |> where([p], p.recent_downloads > ^min_downloads) |> select([p], p.name)
+      "packages"
+      |> where([p], p.recent_downloads > ^min_downloads)
+      |> select([p], p.name)
 
     "packages_edges"
     |> select([e], {e.source, e.target})
