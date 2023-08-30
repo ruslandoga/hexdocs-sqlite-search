@@ -219,9 +219,14 @@ defmodule Dev do
     end)
   end
 
-  def packages_graph do
+  def packages_graph(min_downloads \\ 1000) do
+    packages_q =
+      "packages" |> where([p], p.recent_downloads > ^min_downloads) |> select([p], p.name)
+
     "packages_edges"
     |> select([e], {e.source, e.target})
+    |> join(:inner, [e], p in subquery(packages_q), on: p.name == e.source)
+    |> join(:inner, [e], p in subquery(packages_q), on: p.name == e.target)
     |> order_by([e], e.source)
     |> Repo.all()
     |> Enum.reduce(Graph.new(), fn {source, target}, graph ->

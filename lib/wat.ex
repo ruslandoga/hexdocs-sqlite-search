@@ -179,48 +179,47 @@ defmodule Wat do
     # and reorder based on how close in deps graph?
   end
 
-  def autocomplete_spellfix(query, packages, _anchor) do
-    query =
-      query
-      |> String.split(" ")
-      |> Enum.map(fn segment -> maybe_spellfix(segment) || segment end)
-      |> Enum.join(" ")
-
-    "docs"
-    |> maybe_limit_packages(packages)
-    |> join(:inner, [d], t in "autocomplete", on: d.id == t.rowid)
-    |> join(:inner, [d], p in "packages", on: d.package == p.name and p.recent_downloads > 1000)
-    |> where([d, t], fragment("? MATCH ?", t.title, ^quote_query(query)))
-    |> select([d, t, p], %{
-      id: d.id,
-      package: d.package,
-      ref: d.ref,
-      # title: fragment("snippet(autocomplete, 0, '<b><i>', '</i></b>', '...', 100)"),
-      title: d.title,
-      rank: fragment("rank"),
-      recent_downloads: p.recent_downloads
-    })
-    |> order_by([_, _, p], fragment("rank") - p.recent_downloads / 1_200_000)
-    |> limit(25)
-    |> Wat.Repo.all()
+  defp autocomplete_spellfix(query, packages, _anchor) do
+    # combinations: json postges -> (json postgres, json postgis)
+    query
+    |> String.split(" ")
+    |> Enum.flat_map(&maybe_spellfix/1)
+    |> Enum.flat_map(fn query ->
+      "docs"
+      |> maybe_limit_packages(packages)
+      |> join(:inner, [d], t in "autocomplete", on: d.id == t.rowid)
+      |> join(:inner, [d], p in "packages", on: d.package == p.name and p.recent_downloads > 1000)
+      |> where([d, t], fragment("? MATCH ?", t.title, ^quote_query(query)))
+      |> select([d, t, p], %{
+        id: d.id,
+        package: d.package,
+        ref: d.ref,
+        # title: fragment("snippet(autocomplete, 0, '<b><i>', '</i></b>', '...', 100)"),
+        title: d.title,
+        rank: fragment("rank"),
+        recent_downloads: p.recent_downloads
+      })
+      |> order_by([_, _, p], fragment("rank") - p.recent_downloads / 1_200_000)
+      |> limit(10)
+      |> Wat.Repo.all()
+    end)
+    |> Enum.sort_by(fn d -> d.rank - d.recent_downloads / 1_200_000 end, :asc)
+    |> Enum.take(25)
   end
 
+  @spec maybe_spellfix(String.t()) :: [String.t()]
   def maybe_spellfix(term) do
     "autocomplete_spellfix"
-    |> where([s], fragment("word match ? and top=5", ^term))
-    |> order_by([s], desc: s.rank)
-    |> limit(1)
+    |> where([s], fragment("word match ? and top=3", ^term))
     |> select([s], map(s, [:word, :distance]))
-    |> Wat.Repo.one()
+    |> Wat.Repo.all()
     |> case do
-      %{word: ^term} ->
-        nil
-
-      %{word: word, distance: distance} ->
-        if distance < 200, do: word
+      [%{word: ^term} | _rest] -> [term]
+      fixes -> fixes |> Enum.filter(&(&1.distance < 200)) |> Enum.map(& &1.word)
     end
   end
 
+  # TODO spellfix on fts_vocab?
   def fts(query, packages, _anchor = nil) do
     "docs"
     |> maybe_limit_packages(packages)
@@ -239,10 +238,41 @@ defmodule Wat do
     |> order_by([_, _, p], fragment("rank") - p.recent_downloads / 1_200_000)
     |> limit(20)
     |> Wat.Repo.all()
+    |> case do
+      [] -> fts_spellfix(query, packages, _anchor = nil)
+      [_ | _] = results -> results
+    end
   end
 
   def fts(_query, _packages, _anchor) do
     []
+  end
+
+  defp fts_spellfix(query, packages, _anchor) do
+    query
+    |> String.split(" ")
+    |> Enum.flat_map(&maybe_spellfix/1)
+    |> Enum.flat_map(fn query ->
+      "docs"
+      |> maybe_limit_packages(packages)
+      |> join(:inner, [d], f in "fts", on: d.id == f.rowid)
+      |> join(:inner, [d], p in "packages", on: d.package == p.name)
+      |> where([d, f], fragment("fts MATCH ?", ^quote_query(query)))
+      |> select([d, f, p], %{
+        id: d.id,
+        package: d.package,
+        ref: d.ref,
+        title: fragment("snippet(fts, 0, '<b><i>', '</i></b>', '...', 10)"),
+        doc: fragment("snippet(fts, 1, '<b><i>', '</i></b>', '...', 50)"),
+        rank: fragment("rank"),
+        recent_downloads: p.recent_downloads
+      })
+      |> order_by([_, _, p], fragment("rank") - p.recent_downloads / 1_200_000)
+      |> limit(10)
+      |> Wat.Repo.all()
+    end)
+    |> Enum.sort_by(fn d -> d.rank - d.recent_downloads / 1_200_000 end, :asc)
+    |> Enum.take(20)
   end
 
   defp maybe_limit_packages(query, []), do: query
