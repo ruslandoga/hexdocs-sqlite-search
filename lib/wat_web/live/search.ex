@@ -122,7 +122,7 @@ defmodule WatWeb.SearchLive do
 
     socket =
       cond do
-        query && String.trim(query) == "" ->
+        query && (String.trim(query) == "" or byte_size(query) <= 2) ->
           assign(socket, autocomplete: [], fts: [], semantic: [])
 
         query ->
