@@ -109,6 +109,7 @@ defmodule WatWeb.SearchLive do
   # improve full-text search (make it similar to ex_doc)
   # faiss ivf vs hnswlib
   # sqlite vs typesense
+  # <3 chars search (padding?)
 
   @impl true
   def mount(_params, _session, socket) do
