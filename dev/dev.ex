@@ -219,16 +219,29 @@ defmodule Dev do
     end)
   end
 
-  def packages_graph(min_downloads \\ 1000) do
+  def packages_graph(min_downloads) do
     packages_q =
       "packages"
-      |> where([p], p.recent_downloads > ^min_downloads)
+      |> where([p], p.recent_downloads >= ^min_downloads)
       |> select([p], p.name)
 
     "packages_edges"
     |> select([e], {e.source, e.target})
     |> join(:inner, [e], p in subquery(packages_q), on: p.name == e.source)
     |> join(:inner, [e], p in subquery(packages_q), on: p.name == e.target)
+    |> order_by([e], e.source)
+    |> Repo.all()
+    |> Enum.reduce(Graph.new(), fn {source, target}, graph ->
+      graph
+      |> Graph.add_vertex(source)
+      |> Graph.add_vertex(target)
+      |> Graph.add_edge(source, target)
+    end)
+  end
+
+  def packages_graph do
+    "packages_edges"
+    |> select([e], {e.source, e.target})
     |> order_by([e], e.source)
     |> Repo.all()
     |> Enum.reduce(Graph.new(), fn {source, target}, graph ->
@@ -329,76 +342,151 @@ defmodule Dev do
   def similarly_named_connected(graph, package) do
     package
     |> similarly_named()
-    |> Enum.filter(fn similar_package -> connected?(graph, package, similar_package) end)
+    |> Enum.filter(fn similar_package ->
+      separation_degree(graph, package, similar_package) < 4
+    end)
   end
 
   @stdlib ["ex_unit", "logger", "eex"]
 
-  def connected?(graph, package1, package2) do
+  def separation_degree(graph, package1, package2) do
     if package1 in @stdlib or package2 in @stdlib do
-      true
+      1
     else
-      case Graph.get_paths(graph, package1, package2) do
-        [] ->
-          case Graph.get_paths(graph, package2, package1) do
-            [] -> false
-            [_ | _] -> true
-          end
+      do_separation_degree(graph, MapSet.new([package1]), package2, 0)
+    end
+  end
 
-        [_ | _] ->
-          true
+  defp do_separation_degree(graph, packages, package, degree) do
+    if MapSet.member?(packages, package) do
+      degree
+    else
+      new_packages =
+        packages
+        |> Enum.reduce(packages, fn package, acc ->
+          graph
+          |> Graph.neighbors(package)
+          |> Enum.reduce(acc, fn package, acc -> MapSet.put(acc, package) end)
+        end)
+
+      if MapSet.size(new_packages) == MapSet.size(packages) do
+        -1
+      else
+        do_separation_degree(graph, new_packages, package, degree + 1)
       end
     end
+  end
+
+  def create_similarly_named do
+    Repo.query!("drop table if exists similarly_named")
+
+    Repo.query!(
+      "create table similarly_named(package text not null, package_group text not null) strict"
+    )
+
+    Repo.query!("create index similarly_named_package_index on similarly_named(package)")
+
+    Repo.query!(
+      "create index similarly_named_package_group_index on similarly_named(package_group)"
+    )
   end
 
   def populate_similarly_named_groups(graph) do
-    "packages"
-    |> select([p], p.name)
-    |> where([p], p.recent_downloads > 1000)
-    |> Repo.all()
-    |> Enum.reduce([], fn package, acc ->
-      case similarly_named(package) do
-        [] -> acc
-        [_ | _] = similar -> [{package, similar} | acc]
-      end
-    end)
-    # invert
-    |> Enum.flat_map(fn {group, packages} ->
-      Enum.map(packages, fn package -> {package, group} end)
-    end)
-    |> Enum.group_by(
-      fn {package, _} -> package end,
-      fn {_, group} -> group end
-    )
-    # deduplicate
-    |> Enum.map(fn {package, group} = mapping ->
-      case group do
-        [_only_one] = _good -> mapping
-        [_ | _] -> {package, deduplicate_group(package, group, graph)}
-      end
-    end)
+    mappings =
+      "packages"
+      |> select([p], p.name)
+      |> where([p], p.recent_downloads > 1000)
+      |> Repo.all()
+      |> Enum.reduce([], fn package, acc ->
+        case similarly_named(package) do
+          [] -> acc
+          [_ | _] = similar -> [{package, similar} | acc]
+        end
+      end)
+      |> Enum.flat_map(fn {group, packages} ->
+        Enum.map(packages, fn package -> {package, group} end)
+      end)
+      |> Enum.group_by(fn {package, _} -> package end, fn {_, group} -> group end)
+      |> Enum.flat_map(fn {package, groups} ->
+        package
+        |> deduplicate_group(groups, graph)
+        |> Enum.map(fn group -> %{package: package, package_group: group} end)
+      end)
+
+    Repo.insert_all("similarly_named", mappings)
   end
+
+  def list_similarly_named(package) do
+    group =
+      "similarly_named" |> where(package_group: ^package) |> select([s], s.package) |> Repo.all()
+
+    case group do
+      [] ->
+        groups_q = "similarly_named" |> where(package: ^package) |> select([s], s.package_group)
+
+        "similarly_named"
+        |> where([s], s.package_group in subquery(groups_q))
+        |> select([s], s.package)
+        |> distinct(true)
+        |> Repo.all()
+
+      [_ | _] ->
+        group
+    end
+  end
+
+  def create_similar_packages do
+    Repo.query!("drop table if exists similar_packages")
+
+    Repo.query!("""
+    create table similar_packages(
+      name text,
+      package_group text,
+      recent_downloads integer
+    ) strict
+    """)
+
+    Repo.query!("create index similar_packages_name_index on similar_packages(name)")
+    Repo.query!("create index similar_packages_group_index on similar_packages(group)")
+  end
+
+  def similar_packages(package) do
+    "similar_packages"
+    |> where(name: ^package)
+    |> select([p], p.package_group)
+    |> Repo.one()
+    |> case do
+      nil ->
+        []
+
+      groups ->
+        "similar_packages"
+        |> where([p], p.package_group in ^groups)
+        |> select([p], map(p, [:name, :recent_downloads]))
+        |> order_by([p], desc: p.recent_downloads)
+        |> Repo.all()
+    end
+  end
+
+  # ex_cldr_calendars_format: [before: ["ex_cldr_calendars", "ex_cldr"], after: ["ex_cldr_calendars"]]
+
+  # plug, ex_cldr, membrane, absinthe, logger, phoenix, ecto, ex_aws
 
   defp deduplicate_group(package, group, graph) do
     # 0. filter only connected packages
-    connected_group = Enum.filter(group, fn group -> connected?(graph, group, package) end)
-
-    if group != connected_group do
-      IO.inspect([before: group, after: connected_group], label: package)
-    end
+    connected_group =
+      Enum.filter(group, fn group -> separation_degree(graph, group, package) < 4 end)
 
     # 1. find smallest common name
-    # e.g. "phoenix" is smallest common for ["phoenix", "phoenix_pubsub"]
+    # e.g. "phoenix" is smallest common for ["phoenix", "phoenix_pubsub", "aws"]
     smallest_group =
       Enum.reject(connected_group, fn package ->
         Enum.any?(connected_group, fn maybe_smaller_package ->
-          String.contains?(package, maybe_smaller_package)
+          unless package == maybe_smaller_package do
+            String.contains?(package, maybe_smaller_package)
+          end
         end)
       end)
-
-    if smallest_group != connected_group do
-      IO.inspect([before: group, after: connected_group], label: package)
-    end
 
     smallest_group
   end
@@ -632,4 +720,94 @@ defmodule Dev do
       |> Enum.map(fn {id, dist} -> docs |> Map.fetch!(id) |> Map.put(:similarity, 1 - dist) end)
     end
   end
+
+  # "docs"
+  #   |> maybe_limit_packages(packages)
+  #   |> join(:inner, [d], t in "autocomplete", on: d.id == t.rowid)
+  #   |> join(:inner, [d], p in "packages", on: d.package == p.name and p.recent_downloads > 1000)
+  #   |> where([d, t], fragment("? MATCH ?", t.title, ^quote_query(query)))
+  #   |> select([d, t, p], %{
+  #     id: d.id,
+  #     package: d.package,
+  #     ref: d.ref,
+  #     # title: fragment("snippet(autocomplete, 0, '<b><i>', '</i></b>', '...', 100)"),
+  #     title: d.title,
+  #     rank: fragment("rank"),
+  #     recent_downloads: p.recent_downloads
+  #   })
+  #   |> order_by([_, _, p], fragment("rank") - p.recent_downloads / 1_200_000)
+  #   |> limit(25)
+
+  def autocomplete(package, query) do
+    Repo.query!(
+      """
+      with recursive neighbors as (
+        select e.target, 1 as distance
+          from packages_edges e
+          join packages p on e.target = p.name
+          where e.source = ? and p.recent_downloads > 10000
+        union
+        select e.target, n.distance + 1
+          from neighbors n
+          join packages_edges e on n.target = e.source
+          join packages p on e.target = p.name
+          where n.distance <= 2 and p.recent_downloads > pow(10, n.distance + 4)
+      )
+      (
+        select d.id, d.title, a.rank from docs d
+        inner join autocomplete a on d.id = a.rowid
+        inner join neighbors n on d.package = n.target
+        where a.title match ?
+        order by rank
+        limit 10
+      )
+      union
+      (
+        select d.id, d.title, a.rank from docs d
+        inner join autocomplete a on d.id = a.rowid
+        inner join packages p on d.package = p.name
+        where a.title match ?
+        order by rank
+        limit 10
+      )
+      """,
+      [package, query]
+    ).rows
+  end
+
+  # sqlite> select a.title from autocomplete a inner join docs d on d.id = a.rowid inner join packages p on d.package = p.name where a.title match 'phoenix json' order by rank / 5 - p.recent_downloads / 1000000 limit 10;
+  # ┌──────────────────────────────────┐
+  # │              title               │
+  # ├──────────────────────────────────┤
+  # │ Phoenix.json_library/0           │
+  # │ Phoenix.Controller.json/2        │
+  # │ Phoenix.Controller.allow_jsonp/2 │
+  # │ Phoenix.ConnTest.json_response/2 │
+  # │ PhoenixJsonLogger                │
+  # │ PhoenixSwagger.JsonApi           │
+  # │ PhoenixSwagger.JsonApi           │
+  # │ PhoenixJsonLogger.log/4          │
+  # │ Phoenix.Pagination.JSON          │
+  # │ PhoenixJsonLogger.call/2         │
+  # └──────────────────────────────────┘
+  # Run Time: real 0.010 user 0.004396 sys 0.003915
+
+  """
+  select d.id, d.title, a.rank from docs d
+  inner join autocomplete a on d.id = a.rowid
+  inner join packages p on d.package = p.name and p.recent_downloads > 2000000 and p.name != 'hex_core'
+  where a.title match '"all"'
+  order by rank
+  limit 10;
+  """
+
+  """
+  select a.title, a.rank from autocomplete a
+  inner join docs d on d.id = a.rowid
+  inner join similarly_named sn on d.package = sn.package and sn.package_group = 'ecto'
+  inner join packages p on d.package = p.name and p.recent_downloads > 100000
+  where a.title match 'start link'
+  order by rank
+  limit 10;
+  """
 end

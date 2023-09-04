@@ -19,6 +19,7 @@ defmodule WatWeb.Router do
 
     live "/", SearchLive, :index
     get "/docs/:package", DocsController, :show
+    get "/search", SearchController, :search
   end
 
   # Other scopes may use custom stacks.

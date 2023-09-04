@@ -34,6 +34,9 @@ CREATE VIRTUAL TABLE autocomplete using fts5(
 )
 /* autocomplete(title) */;
 CREATE VIRTUAL TABLE autocomplete_spellfix using spellfix1();
+CREATE TABLE similarly_named(package text not null, package_group text not null) strict;
+CREATE INDEX similarly_named_package_index on similarly_named(package);
+CREATE INDEX similarly_named_package_group_index on similarly_named(package_group);
 INSERT INTO schema_migrations VALUES(20230818070639,'2023-08-18T09:42:30');
 INSERT INTO schema_migrations VALUES(20230818090457,'2023-08-18T09:42:30');
 INSERT INTO schema_migrations VALUES(20230818091119,'2023-08-19T12:11:25');
