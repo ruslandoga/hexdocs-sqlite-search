@@ -22,7 +22,7 @@ end
 
 config :wat, Wat.Repo,
   # busy_timeout: :timer.seconds(5),
-  cache_size: -2000
+  cache_size: String.to_integer(System.get_env("CACHE_SIZE") || "-2000")
 
 config :wat, Wat.Repo,
   after_connect: fn _conn ->
