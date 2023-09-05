@@ -4,13 +4,19 @@ defmodule WatWeb.SearchController do
   def search(conn, params) do
     query = params["q"]
 
+    packages =
+      case params["packages"] do
+        packages when is_list(packages) -> packages
+        packages when is_binary(packages) -> String.split(packages, ",")
+        nil -> []
+      end
+
     results =
       cond do
         query && (String.trim(query) == "" or byte_size(query) <= 2) ->
           []
 
         query ->
-          %{query: query, packages: packages, anchor: _anchor} = Wat.parse_query(query)
           Wat.api_fts(query, packages)
 
         true ->
