@@ -204,19 +204,23 @@ defmodule Dev do
 
       Repo.query!("""
       create virtual table fts using fts5(
-        title, doc,
+        title, doc, package UNINDEXED,
         tokenize='porter', content='docs', content_rowid='id'
       )
       """)
 
       Repo.query!(
         """
-        insert into fts(rowid, title, doc) select id, title, doc from docs
+        insert into fts(rowid, title, doc, package) select id, title, doc, package from docs
         """,
         [],
         timeout: :infinity
       )
     end)
+
+    Repo.query!("insert into fts(fts) values('optimize')")
+    Repo.query!("vacuum")
+    Repo.query!("pragma wal_checkpoint(truncate)")
   end
 
   def packages_graph(min_downloads) do
@@ -810,4 +814,44 @@ defmodule Dev do
   # order by rank
   # limit 10;
   # """
+
+  def build_per_package_fts do
+    # "packages"
+    # |> where([p], p.recent_downloads > 1_000_000)
+    # |> select([p], p.name)
+    # |> Repo.all()
+    # |> Enum.each(fn package ->
+    #   Repo.query!("drop table if exists #{package}_fts")
+    # end)
+
+    Repo.transaction(fn ->
+      "packages"
+      |> where([p], p.recent_downloads <= 5_000 and p.recent_downloads > 2_500)
+      |> select([p], p.name)
+      |> Repo.all()
+      |> Enum.each(fn package ->
+        Repo.query!("drop table if exists #{package}_fts")
+
+        Repo.query!("""
+        create virtual table #{package}_fts using fts5(
+          title, doc,
+          tokenize='porter', content='docs', content_rowid='id'
+        )
+        """)
+
+        Repo.query!(
+          """
+          insert into #{package}_fts(rowid, title, doc) select id, title, doc from docs where package = ?
+          """,
+          [package],
+          timeout: :infinity
+        )
+
+        Repo.query!("insert into #{package}_fts(#{package}_fts) values('optimize')")
+      end)
+    end)
+
+    Repo.query!("vacuum")
+    Repo.query!("pragma wal_checkpoint(truncate)")
+  end
 end

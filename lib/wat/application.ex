@@ -17,9 +17,10 @@ defmodule Wat.Application do
       # Start Finch
       {Finch, name: Wat.Finch},
       # Start the Endpoint (http/https)
-      WatWeb.Endpoint
+      WatWeb.Endpoint,
       # Start a worker by calling: Wat.Worker.start_link(arg)
-      # {Wat.Worker, arg}
+      # {Wat.Worker, arg},
+      {Task.Supervisor, name: Wat.Tasks}
     ]
 
     if File.exists?("hnsw.idx") do

@@ -8,6 +8,7 @@ defmodule Wat do
   """
 
   import Ecto.Query
+  require Logger
 
   @app :wat
 
@@ -290,27 +291,40 @@ defmodule Wat do
       score: fragment("-rank"),
       excerpts: [fragment("snippet(fts, 1, '<em>', '</em>', '...', 20)")]
     })
-    |> order_by([_, _, p], fragment("rank") - p.recent_downloads / 1_200_000)
-    |> limit(25)
+    |> order_by([_, _, p], desc: p.recent_downloads)
+    |> limit(100)
     |> Wat.Repo.all()
   end
 
   def api_fts(query, packages) do
-    "docs"
-    |> join(:inner, [d], f in "fts", on: d.id == f.rowid)
-    |> where([d, f], fragment("fts match ?", ^quote_query(query)))
-    |> where([d], d.package in ^packages)
-    |> select([d, f], %{
-      package: d.package,
-      type: d.type,
-      title: d.title,
-      ref: d.ref,
-      score: fragment("-rank"),
-      excerpts: [fragment("snippet(fts, 1, '<em>', '</em>', '...', 20)")]
-    })
-    |> order_by([_], fragment("rank"))
-    |> limit(25)
-    |> Wat.Repo.all()
+    query = quote_query(query)
+
+    Wat.Tasks
+    |> Task.Supervisor.async_stream_nolink(
+      packages,
+      fn package ->
+        table = package <> "_fts"
+
+        table
+        |> where([t], fragment("? match ?", literal(^table), ^query))
+        |> select([t], %{
+          title: t.title,
+          excerpts: [fragment("snippet(?, 1, '<em>', '</em>', '...', 20)", literal(^table))]
+        })
+        |> order_by([_], fragment("rank"))
+        |> limit(25)
+        |> Wat.Repo.all()
+        |> Enum.map(&Map.put(&1, :package, package))
+      end,
+      ordered: false,
+      max_concurrency: 3
+    )
+    |> Enum.flat_map(fn result ->
+      case result do
+        {:ok, docs} -> docs
+        {:exit, _reason} -> []
+      end
+    end)
   end
 
   # defp fts_spellfix(query, packages, _anchor) do
