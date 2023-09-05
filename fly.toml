@@ -10,7 +10,8 @@ swap_size_mb = 512
   PHX_HOST = "hexdocs-sqlite.fly.dev"
   PHX_SERVER = "true"
   PORT = "8080"
-  POOL_SIZE = "2"
+  POOL_SIZE = "3"
+  CACHE_SIZE = "-10000"
 
 [http_service]
   internal_port = 8080
