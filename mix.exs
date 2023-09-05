@@ -52,7 +52,8 @@ defmodule Wat.MixProject do
       # {:sqlite_vss, "~> 0.1.2"}
       {:hnswlib, github: "elixir-nx/hnswlib"},
       {:libgraph, "~> 0.16.0"},
-      {:ex_sqlean, "~> 0.8.8"}
+      {:ex_sqlean, "~> 0.8.8"},
+      {:corsica, "~> 2.1"}
     ]
   end
 

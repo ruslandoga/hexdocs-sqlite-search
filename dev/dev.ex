@@ -792,22 +792,22 @@ defmodule Dev do
   # └──────────────────────────────────┘
   # Run Time: real 0.010 user 0.004396 sys 0.003915
 
-  """
-  select d.id, d.title, a.rank from docs d
-  inner join autocomplete a on d.id = a.rowid
-  inner join packages p on d.package = p.name and p.recent_downloads > 2000000 and p.name != 'hex_core'
-  where a.title match '"all"'
-  order by rank
-  limit 10;
-  """
+  # """
+  # select d.id, d.title, a.rank from docs d
+  # inner join autocomplete a on d.id = a.rowid
+  # inner join packages p on d.package = p.name and p.recent_downloads > 2000000 and p.name != 'hex_core'
+  # where a.title match '"all"'
+  # order by rank
+  # limit 10;
+  # """
 
-  """
-  select a.title, a.rank from autocomplete a
-  inner join docs d on d.id = a.rowid
-  inner join similarly_named sn on d.package = sn.package and sn.package_group = 'ecto'
-  inner join packages p on d.package = p.name and p.recent_downloads > 100000
-  where a.title match 'start link'
-  order by rank
-  limit 10;
-  """
+  # """
+  # select a.title, a.rank from autocomplete a
+  # inner join docs d on d.id = a.rowid
+  # inner join similarly_named sn on d.package = sn.package and sn.package_group = 'ecto'
+  # inner join packages p on d.package = p.name and p.recent_downloads > 100000
+  # where a.title match 'start link'
+  # order by rank
+  # limit 10;
+  # """
 end

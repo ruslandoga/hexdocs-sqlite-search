@@ -277,6 +277,25 @@ defmodule Wat do
     []
   end
 
+  def api_fts(query, packages) do
+    "docs"
+    |> maybe_limit_packages(packages)
+    |> join(:inner, [d], f in "fts", on: d.id == f.rowid)
+    |> join(:inner, [d], p in "packages", on: d.package == p.name and p.recent_downloads > 1000)
+    |> where([d, f], fragment("fts match ?", ^quote_query(query)))
+    |> select([d, f], %{
+      package: d.package,
+      type: d.type,
+      title: d.title,
+      ref: d.ref,
+      score: fragment("-rank"),
+      excerpts: [fragment("snippet(fts, 1, '<em>', '</em>', '...', 20)")]
+    })
+    |> order_by([_, _, p], fragment("rank") - p.recent_downloads / 1_200_000)
+    |> limit(25)
+    |> Wat.Repo.all()
+  end
+
   # defp fts_spellfix(query, packages, _anchor) do
   #   query
   #   |> String.split(" ")

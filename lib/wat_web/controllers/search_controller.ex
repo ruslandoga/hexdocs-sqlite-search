@@ -10,8 +10,8 @@ defmodule WatWeb.SearchController do
           []
 
         query ->
-          %{query: query, packages: packages, anchor: anchor} = Wat.parse_query(query)
-          Wat.fts(query, packages, anchor)
+          %{query: query, packages: packages, anchor: _anchor} = Wat.parse_query(query)
+          Wat.api_fts(query, packages)
 
         true ->
           []
