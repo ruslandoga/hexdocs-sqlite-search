@@ -277,9 +277,8 @@ defmodule Wat do
     []
   end
 
-  def api_fts(query, packages) do
+  def api_fts(query, _packages = []) do
     "docs"
-    |> maybe_limit_packages(packages)
     |> join(:inner, [d], f in "fts", on: d.id == f.rowid)
     |> join(:inner, [d], p in "packages", on: d.package == p.name and p.recent_downloads > 1000)
     |> where([d, f], fragment("fts match ?", ^quote_query(query)))
@@ -292,6 +291,24 @@ defmodule Wat do
       excerpts: [fragment("snippet(fts, 1, '<em>', '</em>', '...', 20)")]
     })
     |> order_by([_, _, p], fragment("rank") - p.recent_downloads / 1_200_000)
+    |> limit(25)
+    |> Wat.Repo.all()
+  end
+
+  def api_fts(query, packages) do
+    "docs"
+    |> join(:inner, [d], f in "fts", on: d.id == f.rowid)
+    |> where([d, f], fragment("fts match ?", ^quote_query(query)))
+    |> where([d], d.package in ^packages)
+    |> select([d, f], %{
+      package: d.package,
+      type: d.type,
+      title: d.title,
+      ref: d.ref,
+      score: fragment("-rank"),
+      excerpts: [fragment("snippet(fts, 1, '<em>', '</em>', '...', 20)")]
+    })
+    |> order_by([_], fragment("rank"))
     |> limit(25)
     |> Wat.Repo.all()
   end
