@@ -824,34 +824,105 @@ defmodule Dev do
     #   Repo.query!("drop table if exists #{package}_fts")
     # end)
 
-    Repo.transaction(fn ->
-      "packages"
-      |> where([p], p.recent_downloads <= 5_000 and p.recent_downloads > 2_500)
-      |> select([p], p.name)
-      |> Repo.all()
-      |> Enum.each(fn package ->
-        Repo.query!("drop table if exists #{package}_fts")
+    Repo.transaction(
+      fn ->
+        "packages"
+        |> where([p], p.recent_downloads <= 2_500 and p.recent_downloads > 500)
+        |> where([p], not like(p.name, "sqlite_%"))
+        |> select([p], p.name)
+        |> Repo.all()
+        |> Enum.each(fn package ->
+          Repo.query!("drop table if exists #{package}_fts")
 
-        Repo.query!("""
-        create virtual table #{package}_fts using fts5(
-          title, doc,
-          tokenize='porter', content='docs', content_rowid='id'
-        )
-        """)
+          Repo.query!("""
+          create virtual table #{package}_fts using fts5(
+            title, doc,
+            tokenize='porter', content='docs', content_rowid='id'
+          )
+          """)
 
-        Repo.query!(
-          """
-          insert into #{package}_fts(rowid, title, doc) select id, title, doc from docs where package = ?
-          """,
-          [package],
-          timeout: :infinity
-        )
+          Repo.query!(
+            """
+            insert into #{package}_fts(rowid, title, doc) select id, title, doc from docs where package = ?
+            """,
+            [package],
+            timeout: :infinity
+          )
 
-        Repo.query!("insert into #{package}_fts(#{package}_fts) values('optimize')")
-      end)
-    end)
+          Repo.query!("insert into #{package}_fts(#{package}_fts) values('optimize')")
+        end)
+      end,
+      timeout: :infinity
+    )
 
     Repo.query!("vacuum")
     Repo.query!("pragma wal_checkpoint(truncate)")
+  end
+
+  def build_wat2 do
+    alias Exqlite.Sqlite3
+
+    for file <- ["wat2.db", "wat2.db-wal", "wat2.db-shm"], do: File.rm(file)
+    {:ok, db} = Sqlite3.open("wat2.db")
+
+    try do
+      :ok =
+        Sqlite3.execute(db, """
+        create table docs(
+          id integer primary key,
+          ref text not null,
+          type text not null,
+          title text not null,
+          doc text not null
+        ) strict
+        """)
+
+      :ok = Sqlite3.execute(db, "attach database 'wat_dev.db' as wat_dev")
+
+      :ok =
+        Sqlite3.execute(db, """
+        insert into docs(id, ref, type, title, doc)
+          select id, ref, type, title, doc from wat_dev.docs
+        """)
+
+      :ok = Sqlite3.execute(db, "begin")
+
+      Repo.transaction(
+        fn ->
+          "packages"
+          |> where([p], p.recent_downloads > 500)
+          |> order_by(desc: :recent_downloads)
+          |> select([p], map(p, [:name, :recent_downloads]))
+          |> Repo.all()
+          |> Enum.each(fn package ->
+            IO.inspect(package.recent_downloads, label: package.name)
+            table = "hexdocs_#{package.name}_fts"
+
+            :ok =
+              Sqlite3.execute(db, """
+              create virtual table #{table} using fts5(title, doc, tokenize='porter', content='docs', content_rowid='id')
+              """)
+
+            :ok =
+              Sqlite3.execute(
+                db,
+                """
+                insert into #{table}(rowid, title, doc) select id, title, doc from wat_dev.docs where package = '#{package.name}'
+                """
+              )
+
+            :ok =
+              Sqlite3.execute(db, "insert into #{table}(#{table}) values('optimize')")
+          end)
+        end,
+        timeout: :infinity
+      )
+
+      :ok = Sqlite3.execute(db, "commit")
+      :ok = Sqlite3.execute(db, "vacuum")
+      :ok = Sqlite3.execute(db, "pragma wal_checkpoint(truncate)")
+    after
+      Sqlite3.close(db)
+    end
   end
 end

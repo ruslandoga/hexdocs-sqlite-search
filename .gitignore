@@ -38,5 +38,6 @@ npm-debug.log
 # Database files
 *.db
 *.db-*
-
-hnsw.idx
+*.idx
+*.lz4
+*.zst
