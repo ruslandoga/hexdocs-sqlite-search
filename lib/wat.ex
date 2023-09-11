@@ -10,7 +10,7 @@ defmodule Wat do
   import Ecto.Query
 
   def api_fts(query, packages) do
-    query = quote_query(query)
+    query = sanitize_query(query)
     # TODO whitelist packages
 
     Wat.Tasks
@@ -45,31 +45,49 @@ defmodule Wat do
     end)
   end
 
-  defp quote_query(query) do
+  # TODO
+  # Use WORD^NUMBER (such as foo^2) to boost the given word
+  # Use WORD~NUMBER (such as foo~2) to do a search with edit distance on word
+
+  @doc false
+  def sanitize_query(query) do
     query
     |> String.split(" ")
-    |> Enum.map(&maybe_escape_query/1)
-    |> Enum.join(" OR ")
+    |> sanitize_segments(_required = [], _absent = [], _optional = [])
   end
 
-  defp maybe_escape_query(query) do
-    escaped =
-      if String.contains?(query, "\"") do
-        escape_query(query)
-      else
-        query
-      end
+  defp sanitize_segments([segment | segments], required, absent, optional) do
+    case segment do
+      "-" <> segment ->
+        sanitize_segments(segments, required, [sanitize(segment) | absent], optional)
 
-    "\"" <> escaped <> "\""
+      "+" <> segment ->
+        sanitize_segments(segments, [sanitize(segment) | required], absent, optional)
+
+      segment ->
+        sanitize_segments(segments, required, absent, [sanitize(segment) | optional])
+    end
   end
 
-  defp escape_query(<<?", rest::bytes>>) do
-    <<?", ?", escape_query(rest)::bytes>>
+  defp sanitize_segments([], required, absent, optional) do
+    absent = Enum.map(absent, fn segment -> "NOT " <> segment end)
+
+    case Enum.join(required ++ absent, " AND ") do
+      "" -> Enum.join(optional, " OR ")
+      query -> "(" <> Enum.join(optional, " OR ") <> ") AND " <> query
+    end
   end
 
-  defp escape_query(<<c, rest::bytes>>) do
-    <<c, escape_query(rest)::bytes>>
+  defp sanitize(segment) do
+    segment
+    |> String.split("*")
+    |> Enum.map(&quote_segment/1)
+    |> Enum.join("*")
   end
 
-  defp escape_query(<<>> = done), do: done
+  defp quote_segment("" = empty), do: empty
+
+  defp quote_segment(segment) do
+    ~s["] <> String.replace(segment, ~s["], ~s[""]) <> ~s["]
+  end
 end
