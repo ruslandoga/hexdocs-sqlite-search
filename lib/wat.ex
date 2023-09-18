@@ -26,11 +26,10 @@ defmodule Wat do
           ref: d.ref,
           type: d.type,
           title: t.title,
-          score: selected_as(fragment("bm25(?, 100, 1)", literal(^table)), :score),
           excerpts: [fragment("snippet(?, 1, '<em>', '</em>', '...', 20)", literal(^table))]
         })
         |> limit(25)
-        |> order_by([t], selected_as(:score))
+        |> order_by([t, d], desc: fragment("hexdocs_rank(?, ?)", literal(^table), d.type))
         |> Wat.Repo.all()
         |> Enum.map(&Map.put(&1, :package, package))
       end,
@@ -59,7 +58,7 @@ defmodule Wat do
   defp sanitize_segments([segment | segments], required, absent, optional) do
     case segment do
       "-" <> segment ->
-        sanitize_segments(segments, required, [sanitize(segment) | absent], optional)
+        sanitize_segments(segments, required, ["-" <> sanitize(segment) | absent], optional)
 
       "+" <> segment ->
         sanitize_segments(segments, [sanitize(segment) | required], absent, optional)
@@ -70,11 +69,12 @@ defmodule Wat do
   end
 
   defp sanitize_segments([], required, absent, optional) do
-    absent = Enum.map(absent, fn segment -> "NOT " <> segment end)
+    or_group = Enum.join(optional, " OR ")
+    and_group = Enum.join(absent ++ required, " AND ")
 
-    case Enum.join(required ++ absent, " AND ") do
-      "" -> Enum.join(optional, " OR ")
-      query -> "(" <> Enum.join(optional, " OR ") <> ") AND " <> query
+    case and_group do
+      "" -> or_group
+      _ -> "(" <> or_group <> ") AND " <> and_group
     end
   end
 

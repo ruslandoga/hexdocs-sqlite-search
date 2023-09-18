@@ -7,6 +7,7 @@ defmodule Wat.MixProject do
       version: "0.1.0",
       elixir: "~> 1.14",
       elixirc_paths: elixirc_paths(Mix.env()),
+      compilers: [:elixir_make | Mix.compilers()],
       start_permanent: Mix.env() == :prod,
       releases: releases(),
       aliases: aliases(),
@@ -53,7 +54,8 @@ defmodule Wat.MixProject do
       # {:hnswlib, github: "elixir-nx/hnswlib"},
       # {:libgraph, "~> 0.16.0"},
       # {:ex_sqlean, "~> 0.8.8"},
-      {:corsica, "~> 2.1"}
+      {:corsica, "~> 2.1"},
+      {:elixir_make, "~> 0.7.6"}
     ]
   end
 

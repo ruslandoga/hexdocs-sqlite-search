@@ -27,4 +27,10 @@ config :wat,
 
 config :wat, Wat.Repo,
   cache_size: String.to_integer(System.get_env("WAT_DATABASE_CACHE_SIZE") || "-2000"),
-  pool_size: String.to_integer(System.get_env("WAT_DATABASE_POOL_SIZE") || "3")
+  pool_size: String.to_integer(System.get_env("WAT_DATABASE_POOL_SIZE") || "3"),
+  after_connect: fn _conn ->
+    [db_conn] = Process.get(:"$callers")
+    {:no_state, %{state: %Exqlite.Connection{} = conn}} = :sys.get_state(db_conn)
+    :ok = Exqlite.Basic.enable_load_extension(conn)
+    Exqlite.Basic.load_extension(conn, "priv/hexdocs")
+  end
