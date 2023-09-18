@@ -24,6 +24,8 @@ COPY config/config.exs config/${MIX_ENV}.exs config/
 RUN mix deps.compile
 
 # build project
+COPY Makefile Makefile
+COPY c_src c_src
 COPY lib lib
 RUN mix compile
 
