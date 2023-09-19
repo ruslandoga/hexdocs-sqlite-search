@@ -29,7 +29,7 @@ defmodule Wat do
           excerpts: [fragment("snippet(?, 1, '<em>', '</em>', '...', 20)", literal(^table))]
         })
         |> limit(25)
-        |> order_by([t, d], desc: fragment("hexdocs_rank(?, ?)", literal(^table), d.type))
+        |> order_by([t, d], desc: fragment("hexdocs_rank(?)", literal(^table)))
         |> Wat.Repo.all()
         |> Enum.map(&Map.put(&1, :package, package))
       end,
