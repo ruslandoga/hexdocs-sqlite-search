@@ -1,15 +1,10 @@
-# fly.toml app configuration file generated for hexdocs-sqlite-minimal on 2023-09-06T13:07:58+07:00
-#
-# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
-#
-
 app = "hexdocs-sqlite-minimal"
 primary_region = "waw"
 kill_signal = "SIGTERM"
 swap_size_mb = 512
 
 [build]
-  image = "ghcr.io/ruslandoga/hexdocs-sqlite-search:pr-1"
+  image = "ghcr.io/ruslandoga/hexdocs-sqlite-search:master"
 
 [env]
   WAT_DATABASE_CACHE_SIZE = "-10000"
