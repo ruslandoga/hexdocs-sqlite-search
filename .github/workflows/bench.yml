@@ -1,6 +1,10 @@
 name: bench
 
-on: workflow_dispatch
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches: [master]
 
 jobs:
   mix:
@@ -21,6 +25,15 @@ jobs:
         with:
           elixir-version: ${{ matrix.elixir }}
           otp-version: ${{ matrix.otp }}
+
+      - uses: actions/cache@v3
+        with:
+          path: wat2.db.zst
+          key: wat2.db.zst
+          restore-keys: wat2.db.zst
+
+      - run: curl -C - -O https://hexdocs-artifacts.s3.eu-central-003.backblazeb2.com/wat2.db.zst
+      - run: zstd --rm wat2.db.zst -o wat2.db -d
 
       - uses: actions/cache@v3
         with:

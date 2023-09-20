@@ -33,79 +33,83 @@ defmodule Wat do
   end
 
   def api_fts(query, packages) do
-    query = sanitize_query(query)
-    # TODO whitelist packages
-    db = db()
+    if String.trim(query) == "" do
+      []
+    else
+      query = sanitize_query(query)
+      # TODO whitelist packages
+      db = db()
 
-    Wat.Tasks
-    |> Task.Supervisor.async_stream_nolink(
-      packages,
-      fn package ->
-        table = "hexdocs_" <> package <> "_fts"
+      Wat.Tasks
+      |> Task.Supervisor.async_stream_nolink(
+        packages,
+        fn package ->
+          table = "hexdocs_" <> package <> "_fts"
 
-        sql = """
-        select d.ref, d.type, f.title, snippet(#{table}, 1, '<em>', '</em>', '...', 20), hexdocs_rank(#{table}) \
-        from #{table} f \
-        inner join docs d on f.rowid = d.id \
-        where #{table} match ? \
-        order by 5 desc \
-        limit 25\
-        """
+          sql = """
+          select d.ref, d.type, f.title, snippet(#{table}, 1, '<em>', '</em>', '...', 20), hexdocs_rank(#{table}) \
+          from #{table} f \
+          inner join docs d on f.rowid = d.id \
+          where #{table} match ? \
+          order by 5 desc \
+          limit 25\
+          """
 
-        {:ok, rows} = exec(db, sql, [query])
+          {:ok, rows} = exec(db, sql, [query])
 
-        Enum.map(rows, fn row ->
-          [ref, type, title, snippet, rank] = row
+          Enum.map(rows, fn row ->
+            [ref, type, title, snippet, rank] = row
 
-          boost =
-            case type do
-              "module" ->
-                if String.contains?(title, " ") do
+            boost =
+              case type do
+                "module" ->
+                  if String.contains?(title, " ") do
+                    0.1
+                  else
+                    0.3
+                  end
+
+                type when type in ["function", "callback", "macro"] ->
+                  if String.contains?(title, " ") do
+                    0.1
+                  else
+                    # function = title |> String.split(".") |> List.last()
+                    # if String.starts_with?(function, ) do
+                    #   0.35
+                    # else
+                    #   0.2
+                    # end
+                    0.2
+                  end
+
+                "task" ->
                   0.1
-                else
-                  0.3
-                end
 
-              type when type in ["function", "callback", "macro"] ->
-                if String.contains?(title, " ") do
-                  0.1
-                else
-                  # function = title |> String.split(".") |> List.last()
-                  # if String.starts_with?(function, ) do
-                  #   0.35
-                  # else
-                  #   0.2
-                  # end
-                  0.2
-                end
+                _other ->
+                  0
+              end
 
-              "task" ->
-                0.1
-
-              _other ->
-                0
-            end
-
-          %{
-            ref: ref,
-            type: type,
-            title: title,
-            excerpts: [snippet],
-            rank: rank + boost,
-            package: package
-          }
-        end)
-      end,
-      ordered: false,
-      max_concurrency: 3
-    )
-    |> Enum.flat_map(fn result ->
-      case result do
-        {:ok, docs} -> docs
-        {:exit, _reason} -> []
-      end
-    end)
-    |> Enum.sort_by(& &1.rank, :desc)
+            %{
+              ref: ref,
+              type: type,
+              title: title,
+              excerpts: [snippet],
+              rank: rank + boost,
+              package: package
+            }
+          end)
+        end,
+        # ordered: false,
+        max_concurrency: 3
+      )
+      |> Enum.flat_map(fn result ->
+        case result do
+          {:ok, docs} -> docs
+          {:exit, _reason} -> []
+        end
+      end)
+      |> Enum.sort_by(& &1.rank, :desc)
+    end
   end
 
   # TODO

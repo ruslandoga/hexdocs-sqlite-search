@@ -57,30 +57,30 @@ defmodule WatTest do
                      "Returns true if the current process is inside a <em>transaction</em>.\n\nIf you are using the `Ecto.Adapters.SQL.Sandbox` in..."
                    ],
                    package: "ecto",
+                   rank: 2.2,
                    ref: "Ecto.Repo.html#c:in_transaction?/0",
                    title: "Ecto.Repo.in_transaction?/0",
-                   type: "callback",
-                   rank: 2.2
-                 },
-                 %{
-                   excerpts: [
-                     "MyRepo.in_<em>transaction</em>?\n    #=> false\n\n    MyRepo.<em>transaction</em>(fn ->\n      MyRepo.in_<em>transaction</em>? #=> true\n    end)"
-                   ],
-                   package: "ecto",
-                   ref: "Ecto.Repo.html#c:in_transaction?/0-examples",
-                   title: "Examples - Ecto.Repo.in_transaction?/0",
-                   type: "callback",
-                   rank: 2.2
+                   type: "callback"
                  },
                  %{
                    excerpts: [
                      "Runs the given function or `Ecto.Multi` inside a <em>transaction</em>."
                    ],
                    package: "ecto",
+                   rank: 2.2,
                    ref: "Ecto.Repo.html#c:transaction/2",
                    title: "Ecto.Repo.transaction/2",
+                   type: "callback"
+                 },
+                 %{
                    type: "callback",
-                   rank: 2.2
+                   title: "Ecto.Adapter.Transaction.in_transaction?/1",
+                   ref: "Ecto.Adapter.Transaction.html#c:in_transaction?/1",
+                   package: "ecto",
+                   rank: 2.2,
+                   excerpts: [
+                     "Returns true if the given process is inside a <em>transaction</em>."
+                   ]
                  }
                ]
     end
@@ -101,24 +101,24 @@ defmodule WatTest do
                    type: "function"
                  },
                  %{
-                   excerpts: [
-                     "* `:required` - if the <em>embed</em> is a required field. For <em>embeds</em> of cardinality\n    one, a non-nil value satisfies this validation..."
-                   ],
+                   type: "function",
+                   title: "Ecto.Changeset.get_embed/3",
+                   ref: "Ecto.Changeset.html#get_embed/3",
                    package: "ecto",
                    rank: 2.2,
-                   ref: "Ecto.Changeset.html#cast_embed/3-options",
-                   title: "Options - Ecto.Changeset.cast_embed/3",
-                   type: "function"
-                 },
-                 %{
                    excerpts: [
                      "Gets the embedded entry or entries from changes or from the data.\n\nReturned data is normalized to changesets by default..."
-                   ],
+                   ]
+                 },
+                 %{
+                   type: "function",
+                   title: "Ecto.Changeset.put_embed/4",
+                   ref: "Ecto.Changeset.html#put_embed/4",
                    package: "ecto",
                    rank: 2.2,
-                   ref: "Ecto.Changeset.html#get_embed/3",
-                   title: "Ecto.Changeset.get_embed/3",
-                   type: "function"
+                   excerpts: [
+                     "Puts the given <em>embed</em> entry or entries as a change in the changeset.\n\nThis function is used to work with..."
+                   ]
                  }
                ]
     end

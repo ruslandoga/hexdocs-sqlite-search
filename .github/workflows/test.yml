@@ -27,6 +27,15 @@ jobs:
 
       - uses: actions/cache@v3
         with:
+          path: wat2.db.zst
+          key: wat2.db.zst
+          restore-keys: wat2.db.zst
+
+      - run: curl -C - -O https://hexdocs-artifacts.s3.eu-central-003.backblazeb2.com/wat2.db.zst
+      - run: zstd --rm wat2.db.zst -o wat2.db -d
+
+      - uses: actions/cache@v3
+        with:
           path: |
             deps
             _build
