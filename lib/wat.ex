@@ -56,7 +56,17 @@ defmodule Wat do
             end
 
           type when type in ["function", "callback", "macro"] ->
-            0.2
+            if String.contains?(title, " ") do
+              0.1
+            else
+              # function = title |> String.split(".") |> List.last()
+              # if String.starts_with?(function, ) do
+              #   0.35
+              # else
+              #   0.2
+              # end
+              0.2
+            end
 
           "task" ->
             0.1
