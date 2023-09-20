@@ -6,10 +6,11 @@ defmodule Wat.Application do
   def start(_type, _args) do
     port = Application.fetch_env!(:wat, :port)
     server? = !!Application.get_env(:wat, :server)
+    database = Application.fetch_env!(:wat, :database)
+    Wat.start_db!(database)
 
     children = [
       {Task.Supervisor, name: Wat.Tasks},
-      Wat.Repo,
       if server? do
         {Plug.Cowboy,
          scheme: :http, plug: Wat.Router, options: [ip: {0, 0, 0, 0, 0, 0, 0, 0}, port: port]}

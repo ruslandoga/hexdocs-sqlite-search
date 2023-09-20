@@ -7,8 +7,6 @@
 # General application configuration
 import Config
 
-config :wat, ecto_repos: [Wat.Repo]
-
 # Configures Elixir's Logger
 config :logger, :console, format: "$time [$level] $message\n"
 
