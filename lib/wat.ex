@@ -26,14 +26,15 @@ defmodule Wat do
           ref: d.ref,
           type: d.type,
           title: t.title,
-          excerpts: [fragment("snippet(?, 1, '<em>', '</em>', '...', 20)", literal(^table))]
+          excerpts: [fragment("snippet(?, 1, '<em>', '</em>', '...', 20)", literal(^table))],
+          rank: fragment("hexdocs_rank(?)", literal(^table))
         })
         |> limit(25)
-        |> order_by([t, d], desc: fragment("hexdocs_rank(?)", literal(^table)))
+        |> order_by([_], fragment("5 desc"))
         |> Wat.Repo.all()
         |> Enum.map(&Map.put(&1, :package, package))
       end,
-      ordered: false,
+      # ordered: false,
       max_concurrency: 3
     )
     |> Enum.flat_map(fn result ->
@@ -42,6 +43,31 @@ defmodule Wat do
         {:exit, _reason} -> []
       end
     end)
+    |> Enum.map(fn doc ->
+      %{type: type, title: title, rank: rank} = doc
+
+      boost =
+        case type do
+          "module" ->
+            if String.contains?(title, " ") do
+              0.1
+            else
+              0.3
+            end
+
+          type when type in ["function", "callback", "macro"] ->
+            0.2
+
+          "task" ->
+            0.1
+
+          _other ->
+            0
+        end
+
+      %{doc | rank: rank + boost}
+    end)
+    |> Enum.sort_by(& &1.rank, :desc)
   end
 
   # TODO
