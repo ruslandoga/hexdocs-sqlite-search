@@ -55,7 +55,7 @@ defmodule Wat do
         {:ok, rows} = exec(db, sql, [query])
 
         Enum.map(rows, fn row ->
-          [ref, type, title, excerpts, rank] = row
+          [ref, type, title, snippet, rank] = row
 
           boost =
             case type do
@@ -90,7 +90,7 @@ defmodule Wat do
             ref: ref,
             type: type,
             title: title,
-            excerpts: excerpts,
+            excerpts: [snippet],
             rank: rank + boost,
             package: package
           }
