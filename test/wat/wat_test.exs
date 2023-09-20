@@ -9,37 +9,17 @@ defmodule WatTest do
     test "query w/ packages" do
       found = Wat.api_fts("query", ["ecto"])
 
-      assert Enum.take(found, 3) == [
-               %{
-                 excerpts: [
-                   "Provides the <em>Query</em> DSL.\n\n<em>Queries</em> are used to retrieve and manipulate data from a repository\n(see `Ecto.Repo`). Ecto <em>queries</em>..."
-                 ],
-                 package: "ecto",
-                 rank: 2.3,
-                 ref: "Ecto.Query.html",
-                 title: "Ecto.Query",
-                 type: "module"
-               },
-               %{
-                 excerpts: [
-                   "The `Ecto.<em>Query</em>` struct.\n\nUsers of Ecto must consider this struct as opaque\nand not access its field directly. Authors..."
-                 ],
-                 package: "ecto",
-                 rank: 2.2,
-                 ref: "Ecto.Query.html#__struct__/0",
-                 title: "Ecto.Query.__struct__/0",
-                 type: "function"
-               },
-               %{
-                 type: "macro",
-                 title: "Ecto.Query.distinct/3",
-                 ref: "Ecto.Query.html#distinct/3",
-                 package: "ecto",
-                 excerpts: [
-                   "A distinct <em>query</em> expression.\n\nWhen true, only keeps distinct values from the resulting\nselect expression.\n\nIf supported by your database..."
-                 ],
-                 rank: 2.2
-               }
+      assert take_titles(found) == [
+               "Ecto.Query.put_query_prefix/2",
+               "Ecto.Repo.prepare_query/3",
+               "Ecto.Queryable.to_query/1",
+               "Ecto.Adapter.Queryable.plan_query/3",
+               "Ecto.Adapter.Queryable.prepare_query/3",
+               "Ecto.Association.ManyToMany.assoc_query/2",
+               "Ecto.Query",
+               "Ecto.Query.API",
+               "Ecto.Query.WindowAPI",
+               "Query - Ecto"
              ]
     end
 
@@ -47,80 +27,65 @@ defmodule WatTest do
       assert Wat.api_fts("", ["ecto"]) == []
     end
 
-    test "'transaction' in [ecto,ecto_sql,db_connection,ecto_ch,mint]" do
+    test "'transaction'" do
       found = Wat.api_fts("transaction", ["ecto", "ecto_sql", "db_connection"])
 
-      assert Enum.take(found, 3) ==
-               [
-                 %{
-                   excerpts: [
-                     "Returns true if the current process is inside a <em>transaction</em>.\n\nIf you are using the `Ecto.Adapters.SQL.Sandbox` in..."
-                   ],
-                   package: "ecto",
-                   rank: 2.2,
-                   ref: "Ecto.Repo.html#c:in_transaction?/0",
-                   title: "Ecto.Repo.in_transaction?/0",
-                   type: "callback"
-                 },
-                 %{
-                   excerpts: [
-                     "Runs the given function or `Ecto.Multi` inside a <em>transaction</em>."
-                   ],
-                   package: "ecto",
-                   rank: 2.2,
-                   ref: "Ecto.Repo.html#c:transaction/2",
-                   title: "Ecto.Repo.transaction/2",
-                   type: "callback"
-                 },
-                 %{
-                   type: "callback",
-                   title: "Ecto.Adapter.Transaction.in_transaction?/1",
-                   ref: "Ecto.Adapter.Transaction.html#c:in_transaction?/1",
-                   package: "ecto",
-                   rank: 2.2,
-                   excerpts: [
-                     "Returns true if the given process is inside a <em>transaction</em>."
-                   ]
-                 }
-               ]
+      assert take_titles(found) == [
+               "Ecto.Repo.in_transaction?/0",
+               "Ecto.Repo.transaction/2",
+               "Ecto.Adapter.Transaction.in_transaction?/1",
+               "Ecto.Adapter.Transaction.transaction/3",
+               "Ecto.Adapter.Migration.supports_ddl_transaction?/0",
+               "DBConnection.transaction/3",
+               "Nested transactions - Ecto.Repo.transaction/2",
+               "Aborted transactions - Ecto.Repo.transaction/2",
+               "Ecto.Adapter.Transaction",
+               "Composable transactions with Multi"
+             ]
     end
 
-    test "'embed json' in [ecto,ecto_sql,db_connection,ecto_ch,mint]" do
-      found = Wat.api_fts("embed json", ["ecto", "ecto_sql", "db_connection"])
+    test "'embed json'" do
+      found =
+        Wat.api_fts("embed json", [
+          "ecto",
+          "ecto_sql",
+          "db_connection",
+          "phoenix",
+          "plug",
+          "phoenix_live_view"
+        ])
 
-      assert Enum.take(found, 3) ==
-               [
-                 %{
-                   excerpts: [
-                     "Casts the given <em>embed</em> with the changeset parameters.\n\nThe parameters for the given <em>embed</em> will be retrieved\nfrom `changeset.params..."
-                   ],
-                   package: "ecto",
-                   rank: 2.2,
-                   ref: "Ecto.Changeset.html#cast_embed/3",
-                   title: "Ecto.Changeset.cast_embed/3",
-                   type: "function"
-                 },
-                 %{
-                   type: "function",
-                   title: "Ecto.Changeset.get_embed/3",
-                   ref: "Ecto.Changeset.html#get_embed/3",
-                   package: "ecto",
-                   rank: 2.2,
-                   excerpts: [
-                     "Gets the embedded entry or entries from changes or from the data.\n\nReturned data is normalized to changesets by default..."
-                   ]
-                 },
-                 %{
-                   type: "function",
-                   title: "Ecto.Changeset.put_embed/4",
-                   ref: "Ecto.Changeset.html#put_embed/4",
-                   package: "ecto",
-                   rank: 2.2,
-                   excerpts: [
-                     "Puts the given <em>embed</em> entry or entries as a change in the changeset.\n\nThis function is used to work with..."
-                   ]
-                 }
-               ]
+      assert take_titles(found) == [
+               "Ecto.Changeset.cast_embed/3",
+               "Ecto.Changeset.get_embed/3",
+               "Ecto.Changeset.put_embed/4",
+               "Ecto.Schema.embeds_many/3",
+               "Ecto.Schema.embeds_many/4",
+               "Ecto.Schema.embeds_one/3",
+               "Ecto.Schema.embeds_one/4",
+               "Ecto.ParameterizedType.embed_as/2",
+               "Ecto.Type.embed_as/1",
+               "Ecto.Type.embed_as/2"
+             ]
     end
+
+    test "returns all relevant fields" do
+      found = Wat.api_fts("transaction", ["ecto", "ecto_sql", "db_connection"])
+
+      assert hd(found) == %{
+               type: "callback",
+               title: "Ecto.Repo.in_transaction?/0",
+               ref: "Ecto.Repo.html#c:in_transaction?/0",
+               package: "ecto",
+               rank: 2.3,
+               excerpts: [
+                 "Returns true if the current process is inside a <em>transaction</em>.\n\nIf you are using the `Ecto.Adapters.SQL.Sandbox` in..."
+               ]
+             }
+    end
+  end
+
+  defp take_titles(docs, count \\ 10) do
+    docs |> Enum.map(& &1.title) |> Enum.take(count)
   end
 end

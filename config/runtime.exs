@@ -20,7 +20,7 @@ import Config
 default_db =
   case config_env() do
     :prod -> "/app/wat.db"
-    _env -> Path.expand("../wat2.db", Path.dirname(__ENV__.file))
+    _env -> Path.expand("../wat3.db", Path.dirname(__ENV__.file))
   end
 
 config :wat,

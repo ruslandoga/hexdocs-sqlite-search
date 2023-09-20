@@ -15,18 +15,18 @@ defmodule Wat do
     :ok = Sqlite3.execute(db, "pragma cache_size=-64000")
     :ok = Sqlite3.enable_load_extension(db, true)
     ext_path = :filename.join(:code.priv_dir(:wat), ~c"hexdocs.so")
-    {:ok, _} = exec(db, "select load_extension(?)", [ext_path])
+    {:ok, _} = query(db, "select load_extension(?)", [ext_path])
     :ok = :persistent_term.put(:hexdocs_db, db)
   end
 
   def db, do: :persistent_term.get(:hexdocs_db)
 
-  def exec(db, sql, args) do
+  def query(db, sql, args, max_rows \\ 50) do
     {:ok, stmt} = Sqlite3.prepare(db, sql)
 
     try do
       :ok = Sqlite3.bind(db, stmt, args)
-      Sqlite3.fetch_all(db, stmt, 50)
+      Sqlite3.fetch_all(db, stmt, max_rows)
     after
       Sqlite3.release(db, stmt)
     end
@@ -55,7 +55,7 @@ defmodule Wat do
           limit 25\
           """
 
-          {:ok, rows} = exec(db, sql, [query])
+          {:ok, rows} = query(db, sql, [query])
 
           Enum.map(rows, fn row ->
             [ref, type, title, snippet, rank] = row
@@ -66,20 +66,14 @@ defmodule Wat do
                   if String.contains?(title, " ") do
                     0.1
                   else
-                    0.3
+                    0.2
                   end
 
                 type when type in ["function", "callback", "macro"] ->
                   if String.contains?(title, " ") do
                     0.1
                   else
-                    # function = title |> String.split(".") |> List.last()
-                    # if String.starts_with?(function, ) do
-                    #   0.35
-                    # else
-                    #   0.2
-                    # end
-                    0.2
+                    0.3
                   end
 
                 "task" ->
