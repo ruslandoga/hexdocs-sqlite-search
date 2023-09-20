@@ -1,8 +1,7 @@
 [
-  import_deps: [:ecto, :ecto_sql, :plug],
+  import_deps: [:plug],
   inputs: [
     "*.{heex,ex,exs}",
-    "{config,lib,test,dev,bench}/**/*.{heex,ex,exs}",
-    "priv/*/seeds.exs"
+    "{config,lib,test,dev,bench}/**/*.{heex,ex,exs}"
   ]
 ]
