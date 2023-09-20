@@ -34,7 +34,7 @@ defmodule Wat.MixProject do
   # Type `mix help deps` for examples and options.
   defp deps do
     [
-      {:ecto_sqlite3, ">= 0.0.0"},
+      {:exqlite, "~> 0.14.0"},
       {:jason, "~> 1.2"},
       {:plug_cowboy, "~> 2.5"},
       {:corsica, "~> 2.1"},
