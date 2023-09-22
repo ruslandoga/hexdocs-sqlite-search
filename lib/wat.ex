@@ -180,4 +180,44 @@ defmodule Wat do
   defp quote_segment(segment) do
     ~s["] <> String.replace(segment, ~s["], ~s[""]) <> ~s["]
   end
+
+  def api_autocomplete(query, packages) do
+    query = sanitize_query(query)
+
+    if query == "" do
+      []
+    else
+      db = db()
+
+      Wat.Tasks
+      |> Task.Supervisor.async_stream_nolink(
+        packages,
+        fn package ->
+          table = "hexdocs_" <> package <> "_fts"
+
+          sql = """
+          select f.title \
+          from #{table} f \
+          where title match ? \
+          limit 3\
+          """
+
+          {:ok, rows} = query(db, sql, [query])
+
+          Enum.map(rows, fn row ->
+            [title] = row
+            %{title: title, package: package}
+          end)
+        end,
+        # ordered: false,
+        max_concurrency: 3
+      )
+      |> Enum.flat_map(fn result ->
+        case result do
+          {:ok, docs} -> docs
+          {:exit, _reason} -> []
+        end
+      end)
+    end
+  end
 end
