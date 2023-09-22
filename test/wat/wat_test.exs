@@ -83,6 +83,74 @@ defmodule WatTest do
                ]
              }
     end
+
+    test "-phrase operator" do
+      assert Wat.api_fts("-embed", ["ecto"]) == []
+
+      assert take_titles(Wat.api_fts("embed", ["ecto"])) == [
+               "Ecto.Changeset.cast_embed/3",
+               "Ecto.Changeset.get_embed/3",
+               "Ecto.Changeset.put_embed/4",
+               "Ecto.Schema.embeds_many/3",
+               "Ecto.Schema.embeds_many/4",
+               "Ecto.Schema.embeds_one/3",
+               "Ecto.Schema.embeds_one/4",
+               "Ecto.ParameterizedType.embed_as/2",
+               "Ecto.Type.embed_as/1",
+               "Ecto.Type.embed_as/2"
+             ]
+
+      assert take_titles(Wat.api_fts("embed -changeset", ["ecto"])) == [
+               "Ecto.Schema.embeds_many/3",
+               "Ecto.Schema.embeds_many/4",
+               "Ecto.Schema.embeds_one/3",
+               "Ecto.Schema.embeds_one/4",
+               "Ecto.ParameterizedType.embed_as/2",
+               "Ecto.Type.embed_as/1",
+               "Ecto.Type.embed_as/2",
+               "Ecto.UUID.embed_as/1",
+               "Embeds - Ecto",
+               "Embeds - Ecto.Enum"
+             ]
+    end
+
+    test "+phrase operator" do
+      assert Wat.api_fts("+embed", ["ecto"]) == Wat.api_fts("embed", ["ecto"])
+
+      assert take_titles(Wat.api_fts("embed +changeset", ["ecto"])) == [
+               "Ecto.Changeset.cast_embed/3",
+               "Ecto.Changeset.get_embed/3",
+               "Ecto.Changeset.put_embed/4",
+               "Associations, embeds and on replace - Ecto.Changeset",
+               "Embeds - Embedded Schemas",
+               "Extracting the embeds - Embedded Schemas",
+               "Changesets - Embedded Schemas",
+               "Ecto.Changeset.change/2",
+               "Ecto.Changeset.changed?/3",
+               "Ecto.Changeset.get_change/3"
+             ]
+    end
+
+    test "field:phrase operator" do
+      assert take_titles(Wat.api_fts("embed +title:changeset", ["ecto"])) == [
+               "Changesets - Embedded Schemas"
+             ]
+    end
+
+    test "phras* operator" do
+      assert take_titles(Wat.api_fts("tra*", ["ecto"])) == [
+               "Ecto.Changeset.traverse_errors/2",
+               "Ecto.Changeset.traverse_validations/2",
+               "Ecto.Repo.in_transaction?/0",
+               "Ecto.Repo.transaction/2",
+               "Ecto.Adapter.Transaction.in_transaction?/1",
+               "Ecto.Adapter.Transaction.transaction/3",
+               "Nested transactions - Ecto.Repo.transaction/2",
+               "Aborted transactions - Ecto.Repo.transaction/2",
+               "Ecto.Adapter.Transaction",
+               "Composable transactions with Multi"
+             ]
+    end
   end
 
   defp take_titles(docs, count \\ 10) do

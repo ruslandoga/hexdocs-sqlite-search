@@ -33,10 +33,11 @@ defmodule Wat do
   end
 
   def api_fts(query, packages) do
-    if String.trim(query) == "" do
+    query = sanitize_query(query)
+
+    if query == "" do
       []
     else
-      query = sanitize_query(query)
       # TODO whitelist packages
       db = db()
 
@@ -113,14 +114,14 @@ defmodule Wat do
   @doc false
   def sanitize_query(query) do
     query
-    |> String.split(" ")
+    |> String.split(" ", trim: true)
     |> sanitize_segments(_required = [], _absent = [], _optional = [])
   end
 
   defp sanitize_segments([segment | segments], required, absent, optional) do
     case segment do
       "-" <> segment ->
-        sanitize_segments(segments, required, ["-" <> sanitize(segment) | absent], optional)
+        sanitize_segments(segments, required, ["NOT " <> sanitize(segment) | absent], optional)
 
       "+" <> segment ->
         sanitize_segments(segments, [sanitize(segment) | required], absent, optional)
@@ -131,23 +132,50 @@ defmodule Wat do
   end
 
   defp sanitize_segments([], required, absent, optional) do
-    or_group = Enum.join(optional, " OR ")
-    and_group = Enum.join(absent ++ required, " AND ")
+    join_segments(required, absent, optional)
+  end
 
-    case and_group do
-      "" -> or_group
-      _ -> "(" <> or_group <> ") AND " <> and_group
+  defp join_segments([], [], [_ | _] = optional), do: Enum.join(optional, " OR ")
+  defp join_segments([_ | _] = required, [], []), do: Enum.join(required, " AND ")
+
+  defp join_segments([_ | _] = required, [], [_ | _] = optional) do
+    "(" <> Enum.join(optional, " OR ") <> ") AND " <> Enum.join(required, " AND ")
+  end
+
+  defp join_segments([], [_ | _] = absent, [_ | _] = optional) do
+    "(" <> Enum.join(optional, " OR ") <> ") " <> " " <> Enum.join(absent, " ")
+  end
+
+  defp join_segments([_ | _] = required, [_ | _] = absent, [_ | _] = optional) do
+    "(" <>
+      Enum.join(optional, " OR ") <>
+      ") AND " <> Enum.join(required, " AND ") <> " " <> Enum.join(absent, " ")
+  end
+
+  defp join_segments([_ | _] = required, [_ | _] = absent, []) do
+    Enum.join(required, " AND ") <> " " <> Enum.join(absent, " ")
+  end
+
+  defp join_segments([], [], []), do: ""
+  defp join_segments([], [_ | _] = _absent, []), do: ""
+
+  defp sanitize(segment) do
+    if String.ends_with?(segment, "*") do
+      (segment |> String.replace("*", "") |> quote_segment()) <> "*"
+    else
+      segment |> String.replace("*", "") |> quote_segment()
     end
   end
 
-  defp sanitize(segment) do
-    segment
-    |> String.split("*")
-    |> Enum.map(&quote_segment/1)
-    |> Enum.join("*")
+  defp quote_segment("" = empty), do: empty
+
+  defp quote_segment("title:" <> segment) do
+    ~s[title:] <> quote_segment(segment)
   end
 
-  defp quote_segment("" = empty), do: empty
+  defp quote_segment("doc:" <> segment) do
+    ~s[doc:] <> quote_segment(segment)
+  end
 
   defp quote_segment(segment) do
     ~s["] <> String.replace(segment, ~s["], ~s[""]) <> ~s["]

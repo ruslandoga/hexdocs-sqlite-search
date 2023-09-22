@@ -7,6 +7,7 @@ defmodule Wat.Application do
     port = Application.fetch_env!(:wat, :port)
     server? = !!Application.get_env(:wat, :server)
     database = Application.fetch_env!(:wat, :database)
+
     Wat.start_db!(database)
 
     children = [
@@ -18,8 +19,6 @@ defmodule Wat.Application do
     ]
 
     children = Enum.reject(children, &is_nil/1)
-
-    opts = [strategy: :one_for_one, name: Wat.Supervisor]
-    Supervisor.start_link(children, opts)
+    Supervisor.start_link(children, strategy: :one_for_one, name: Wat.Supervisor)
   end
 end
