@@ -174,6 +174,14 @@ defmodule WatTest do
                "Plug.Conn.query_param/0",
                "Plug.Conn.query_params/0"
              ]
+
+      assert take_titles(Wat.api_autocomplete("allow", ["phoenix", "phoenix_live_view", "plug"])) ==
+               [
+                 "Phoenix.Controller.allow_jsonp/2",
+                 "Phoenix.LiveView.allow_upload/3",
+                 "Phoenix.LiveView.disallow_upload/2",
+                 "Allow uploads - Uploads"
+               ]
     end
   end
 
