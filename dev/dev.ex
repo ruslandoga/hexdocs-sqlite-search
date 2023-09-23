@@ -1180,5 +1180,88 @@ defmodule Dev do
     end
   end
 
-  # TODO wat5 spellfix for autocomplete?
+  def build_wat5 do
+    {:ok, wat5} = Sqlite3.open("wat5.db")
+
+    try do
+      :ok = Sqlite3.enable_load_extension(wat5, true)
+      {:ok, _} = Wat.query(wat5, "select load_extension(?)", [ExSqlean.path_for("spellfix")])
+      :ok = Sqlite3.execute(wat5, "attach database 'wat_dev.db' as wat_dev")
+      :ok = Sqlite3.execute(wat5, "begin")
+
+      # {:ok, packages_rows} =
+      #   Wat.query(
+      #     wat5,
+      #     "select name, recent_downloads from wat_dev.packages where recent_downloads > 500 order by recent_downloads desc",
+      #     [],
+      #     _max_rows = 500
+      #   )
+
+      packages_rows = [["phoenix_live_view", 10]]
+
+      insert_sql = fn table, cols, count ->
+        # single (?,?,?,?,...) tuple
+        values_tuple =
+          IO.iodata_to_binary([?(, cols |> Enum.map(fn _ -> ?? end) |> Enum.intersperse(?,), ?)])
+
+        IO.iodata_to_binary([
+          "insert into #{table}(#{Enum.join(cols, ",")}) values ",
+          Enum.intersperse(List.duplicate(values_tuple, count), ?,)
+        ])
+      end
+
+      Enum.each(packages_rows, fn row ->
+        [package, recent_downloads] = row
+
+        IO.puts(package)
+        table = "hexdocs_#{package}_spellfix"
+
+        :ok = Sqlite3.execute(wat5, "drop table if exists #{table}")
+        :ok = Sqlite3.execute(wat5, "create virtual table #{table} using spellfix1()")
+
+        {:ok, rows} =
+          Wat.query(wat5, "select title from wat_dev.docs where package = ?", [package])
+
+        rows
+        |> Enum.flat_map(fn [title] ->
+          _segments =
+            title
+            |> String.split([" ", "-", ".", "/"], trim: true)
+            |> Enum.map(fn word ->
+              word
+              |> String.replace(["`", ":", "(", ")"], "")
+              |> String.trim()
+              |> String.downcase()
+            end)
+            |> Enum.filter(fn word ->
+              is_number =
+                case Integer.parse(word) do
+                  {_, ""} -> true
+                  :error -> false
+                end
+
+              byte_size(word) > 1 and not is_number
+            end)
+            |> IO.inspect(label: "segments")
+        end)
+        |> Enum.uniq()
+        |> IO.inspect(label: "all")
+        |> Enum.chunk_every(1000)
+        |> Enum.each(fn words ->
+          {:ok, _} =
+            Wat.query(
+              wat5,
+              insert_sql.(table, ["word"], length(words)),
+              Enum.map(words, fn word -> [word] end)
+            )
+        end)
+      end)
+
+      :ok = Sqlite3.execute(wat5, "commit")
+      :ok = Sqlite3.execute(wat5, "pragma vacuum")
+      :ok = Sqlite3.execute(wat5, "pragma optimize")
+    after
+      Sqlite3.close(wat5)
+    end
+  end
 end

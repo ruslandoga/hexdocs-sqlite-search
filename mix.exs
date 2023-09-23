@@ -39,7 +39,8 @@ defmodule Wat.MixProject do
       {:plug_cowboy, "~> 2.5"},
       {:corsica, "~> 2.1"},
       {:elixir_make, "~> 0.7.6"},
-      {:benchee, "~> 1.0", only: [:bench]}
+      {:benchee, "~> 1.0", only: [:bench]},
+      {:ex_sqlean, "~> 0.8.8"}
     ]
   end
 

@@ -17,6 +17,7 @@ defmodule Wat do
     :ok = Sqlite3.enable_load_extension(db, true)
     ext_path = :filename.join(:code.priv_dir(:wat), ~c"hexdocs.so")
     {:ok, _} = query(db, "select load_extension(?)", [ext_path])
+    {:ok, _} = Wat.query(db, "select load_extension(?)", [ExSqlean.path_for("spellfix")])
     :ok = :persistent_term.put(:hexdocs_db, db)
   end
 
