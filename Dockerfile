@@ -37,7 +37,7 @@ RUN mix release
 FROM alpine:3.18.2 AS artifacts
 RUN apk add curl zstd
 WORKDIR /export
-RUN curl -O https://hexdocs-artifacts.s3.eu-central-003.backblazeb2.com/wat4.db.zst
+RUN curl -O 'https://hexdocs-artifacts.s3.eu-central-003.backblazeb2.com/wat4.db.zst?d=123'
 RUN zstd --rm wat4.db.zst -o wat.db -d
 
 # start a new build stage so that the final image will only contain
