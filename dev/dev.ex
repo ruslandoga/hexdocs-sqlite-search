@@ -1014,4 +1014,171 @@ defmodule Dev do
       Sqlite3.close(wat3)
     end
   end
+
+  def build_wat4 do
+    {:ok, wat4} = Sqlite3.open("wat4.db")
+
+    try do
+      :ok = Sqlite3.execute(wat4, "attach database 'wat_dev.db' as wat_dev")
+      :ok = Sqlite3.execute(wat4, "begin")
+
+      # TODO type score?
+      :ok =
+        Sqlite3.execute(
+          wat4,
+          "CREATE TABLE docs(id INTEGER PRIMARY KEY NOT NULL, ref TEXT NOT NULL, type TEXT NOT NULL, title TEXT NOT NULL, doc TEXT NOT NULL) STRICT"
+        )
+
+      :ok =
+        Sqlite3.execute(
+          wat4,
+          "insert into docs(id, ref, type, title, doc) select id, ref, type, title, doc from wat_dev.docs"
+        )
+
+      {:ok, rows} =
+        Wat.query(
+          wat4,
+          "select name from wat_dev.packages where recent_downloads > 500 order by recent_downloads desc",
+          [],
+          _max_rows = 500
+        )
+
+      packages = Enum.map(rows, fn [package] -> package end)
+
+      insert_sql = fn table, count ->
+        IO.iodata_to_binary([
+          "insert into #{table}(rowid, title, ref, type) values ",
+          Enum.intersperse(List.duplicate("(?,?,?,?)", count), ?,)
+        ])
+      end
+
+      # autocomplete
+      Enum.each(packages, fn package ->
+        IO.puts(package)
+        table = "hexdocs_#{package}_autocomplete"
+
+        :ok =
+          Sqlite3.execute(wat4, """
+          create virtual table #{table} using fts5(title, ref UNINDEXED, type UNINDEXED, tokenize='trigram', content='docs', content_rowid='id')
+          """)
+
+        {:ok, rows} =
+          Wat.query(
+            wat4,
+            "select id, title, ref, type from wat_dev.docs where package = ?",
+            [package]
+          )
+
+        rows
+        |> Enum.map(fn row ->
+          [id, title, ref, type] = row
+
+          title =
+            case type do
+              _
+              when type in ["function", "callback", "macro", "macrocallback", "opaque", "type"] ->
+                if String.contains?(title, " - ") do
+                  extras_title(title)
+                else
+                  extract_function(title)
+                end
+
+              _
+              when type in ["behaviour", "exception", "extras", "module", "protocol"] ->
+                extras_title(title)
+
+              "task" ->
+                title
+            end
+
+          [id, title, ref, type]
+        end)
+        |> Enum.chunk_every(1000)
+        |> Enum.each(fn rows ->
+          {:ok, _} =
+            Wat.query(
+              wat4,
+              insert_sql.(table, length(rows)),
+              # flatten once
+              Enum.flat_map(rows, &Function.identity/1)
+            )
+        end)
+
+        :ok =
+          Sqlite3.execute(wat4, "insert into #{table}(#{table}) values('optimize')")
+      end)
+
+      insert_sql = fn table, count ->
+        IO.iodata_to_binary([
+          "insert into #{table}(rowid, title, doc, ref, type) values ",
+          Enum.intersperse(List.duplicate("(?,?,?,?,?)", count), ?,)
+        ])
+      end
+
+      # fts
+      Enum.each(packages, fn package ->
+        IO.puts(package)
+        table = "hexdocs_#{package}_fts"
+
+        :ok =
+          Sqlite3.execute(wat4, """
+          create virtual table #{table} using fts5(title, doc, ref UNINDEXED, type UNINDEXED, tokenize='porter', content='docs', content_rowid='id')
+          """)
+
+        {:ok, rows} =
+          Wat.query(
+            wat4,
+            "select id, title, doc, ref, type from wat_dev.docs where package = ?",
+            [package]
+          )
+
+        rows
+        |> Enum.map(fn row ->
+          [id, title, doc, ref, type] = row
+
+          title =
+            case type do
+              _
+              when type in ["function", "callback", "macro", "macrocallback", "opaque", "type"] ->
+                if String.contains?(title, " - ") do
+                  extras_title(title)
+                else
+                  extract_function(title)
+                end
+
+              _
+              when type in ["behaviour", "exception", "extras", "module", "protocol"] ->
+                extras_title(title)
+
+              "task" ->
+                title
+            end
+
+          [id, title, doc, ref, type]
+        end)
+        |> Enum.chunk_every(1000)
+        |> Enum.each(fn rows ->
+          {:ok, _} =
+            Wat.query(
+              wat4,
+              insert_sql.(table, length(rows)),
+              # flatten once
+              Enum.flat_map(rows, &Function.identity/1)
+            )
+        end)
+
+        :ok =
+          Sqlite3.execute(wat4, "insert into #{table}(#{table}) values('optimize')")
+      end)
+
+      :ok = Sqlite3.execute(wat4, "commit")
+      :ok = Sqlite3.execute(wat4, "pragma vacuum")
+      :ok = Sqlite3.execute(wat4, "pragma optimize")
+      :ok = Sqlite3.execute(wat4, "pragma wal_checkpoint(truncate)")
+    after
+      Sqlite3.close(wat4)
+    end
+  end
+
+  # TODO wat5 spellfix for autocomplete?
 end

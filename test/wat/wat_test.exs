@@ -153,6 +153,30 @@ defmodule WatTest do
     end
   end
 
+  describe "api_autocomplete/2" do
+    test "empty query" do
+      assert Wat.api_autocomplete("", ["ecto"]) == []
+    end
+
+    test "empty packages" do
+      assert Wat.api_autocomplete("query", []) == []
+    end
+
+    test "query" do
+      assert take_titles(Wat.api_autocomplete("query", ["ecto", "ecto_sql", "plug"])) == [
+               "Query - Ecto",
+               "Ecto.Query",
+               "Query expressions - Ecto.Query",
+               "Ecto.Adapters.SQL.query/4",
+               "Ecto.Adapters.SQL.query!/4",
+               "Ecto.Adapters.SQL.query_many/4",
+               "Plug.Conn.fetch_query_params/2",
+               "Plug.Conn.query_param/0",
+               "Plug.Conn.query_params/0"
+             ]
+    end
+  end
+
   defp take_titles(docs, count \\ 10) do
     docs |> Enum.map(& &1.title) |> Enum.take(count)
   end

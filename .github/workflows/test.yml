@@ -27,12 +27,12 @@ jobs:
 
       - uses: actions/cache@v3
         with:
-          path: wat3.db.zst
-          key: wat3.db.zst
-          restore-keys: wat3.db.zst
+          path: wat4.db.zst
+          key: wat4.db.zst
+          restore-keys: wat4.db.zst
 
-      - run: curl -C - -O https://hexdocs-artifacts.s3.eu-central-003.backblazeb2.com/wat3.db.zst
-      - run: zstd --rm wat3.db.zst -o wat3.db -d
+      - run: curl -C - -O https://hexdocs-artifacts.s3.eu-central-003.backblazeb2.com/wat4.db.zst
+      - run: zstd --rm wat4.db.zst -o wat4.db -d
 
       - uses: actions/cache@v3
         with:
