@@ -13,6 +13,7 @@ defmodule Wat do
     {:ok, db} = Sqlite3.open(database, mode: :readonly)
     # :ets.new(:hexdocs_stmt_cache)
     :ok = Sqlite3.execute(db, "pragma cache_size=-64000")
+    :ok = Sqlite3.execute(db, "pragma temp_store=memory")
     :ok = Sqlite3.enable_load_extension(db, true)
     ext_path = :filename.join(:code.priv_dir(:wat), ~c"hexdocs.so")
     {:ok, _} = query(db, "select load_extension(?)", [ext_path])
@@ -48,9 +49,8 @@ defmodule Wat do
           table = "hexdocs_" <> package <> "_fts"
 
           sql = """
-          select d.ref, d.type, f.title, snippet(#{table}, 1, '<em>', '</em>', '...', 20), hexdocs_rank(#{table}) \
+          select f.ref, f.type, f.title, snippet(#{table}, 1, '<em>', '</em>', '...', 20), hexdocs_rank(#{table}) \
           from #{table} f \
-          inner join docs d on f.rowid = d.id \
           where #{table} match ? \
           order by 5 desc \
           limit 25\
@@ -193,10 +193,10 @@ defmodule Wat do
       |> Task.Supervisor.async_stream_nolink(
         packages,
         fn package ->
-          table = "hexdocs_" <> package <> "_fts"
+          table = "hexdocs_" <> package <> "_autocomplete"
 
           sql = """
-          select f.title \
+          select f.title, f.ref, f.type \
           from #{table} f \
           where title match ? \
           limit 3\
@@ -205,8 +205,8 @@ defmodule Wat do
           {:ok, rows} = query(db, sql, [query])
 
           Enum.map(rows, fn row ->
-            [title] = row
-            %{title: title, package: package}
+            [title, ref, type] = row
+            %{title: title, ref: ref, type: type, package: package}
           end)
         end,
         # ordered: false,
