@@ -5,5 +5,5 @@
 - [x] UI for search
 - [x] compare to current hexdocs/ex_doc search
 - [x] prepare title index similar to ex_doc (Mix.Tasks.... -> mix phx.gen...., no subheadings in functions)
-- [x] fly.io demo https://hexdocs-sqlite-minimal.fly.dev
+- [x] fly.io demo https://hexdocs-sqlite-minimal.fly.dev/v0/search?q=insert&packages=ecto,ecto_sql or https://hexdocs-sqlite-minimal.fly.dev/v0/autocomplete?q=insert&packages=ecto,ecto_sql
 - [ ] populate packages_graph, maybe come up with other ways to calculate package similarity
