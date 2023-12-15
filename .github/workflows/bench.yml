@@ -50,7 +50,7 @@ jobs:
       - run: mix compile --warnings-as-errors
       - run: mkdir results
       - run: mix run bench/search.exs | tee results/search.txt
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: results
           path: results/*.txt
