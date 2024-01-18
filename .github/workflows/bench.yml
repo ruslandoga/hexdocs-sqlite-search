@@ -26,7 +26,7 @@ jobs:
           elixir-version: ${{ matrix.elixir }}
           otp-version: ${{ matrix.otp }}
 
-      - uses: actions/cache@v3
+      - uses: actions/cache@v4
         with:
           path: wat4.db.zst
           key: wat4.db.zst
@@ -35,7 +35,7 @@ jobs:
       - run: curl -C - -O https://hexdocs-artifacts.s3.eu-central-003.backblazeb2.com/wat4.db.zst
       - run: zstd --rm wat4.db.zst -o wat4.db -d
 
-      - uses: actions/cache@v3
+      - uses: actions/cache@v4
         with:
           path: |
             deps
